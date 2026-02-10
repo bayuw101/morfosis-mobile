@@ -1,5 +1,5 @@
 import { View, Text, ScrollView, Pressable, Image, Alert, ActivityIndicator, Switch, Modal, FlatList } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
     CreditCard,
     Bell,
@@ -272,21 +272,46 @@ export default function SettingsScreen() {
         });
     };
 
+    const insets = useSafeAreaInsets();
+
+    // Theme Helpers
+    const headerBg = isDark ? '#111827' : '#1e40af';
+    const contentBg = isDark ? '#1f2937' : '#f8fafc';
+    const cardBg = isDark ? '#374151' : '#ffffff';
+    const cardBorder = isDark ? '#4b5563' : '#e2e8f0';
+
+    // ... logic ...
+
     return (
-        <View style={{ flex: 1, backgroundColor: isDark ? '#111827' : '#f9fafb' }}>
-            <SafeAreaView style={{ flex: 1, backgroundColor: isDark ? '#1f2937' : '#ffffff' }}>
-                {/* Header */}
-                <View style={{ backgroundColor: isDark ? '#1f2937' : '#ffffff', borderBottomColor: isDark ? '#374151' : '#f3f4f6' }} className="px-6 py-4 border-b mb-2">
-                    <Text style={{ color: isDark ? '#f9fafb' : '#111827' }} className="text-2xl font-bold">{t('settings.title')}</Text>
+        <View style={{ flex: 1, backgroundColor: headerBg }}>
+            <StatusBar style="light" />
+
+            {/* Header */}
+            <View style={{ paddingTop: insets.top + 10, paddingBottom: 24 }} className="px-6 justify-center">
+                <Text className="text-2xl font-bold text-white">{t('settings.title')}</Text>
+            </View>
+
+            <View
+                style={{
+                    flex: 1,
+                    backgroundColor: contentBg,
+                    borderTopLeftRadius: 28,
+                    borderTopRightRadius: 28,
+                    overflow: 'hidden'
+                }}
+            >
+                {/* iOS-style Handle */}
+                <View className="items-center pt-3 pb-2">
+                    <View style={{ backgroundColor: isDark ? '#4b5563' : '#cbd5e1' }} className="w-10 h-1 rounded-full" />
                 </View>
 
                 <ScrollView
                     className="flex-1"
                     showsVerticalScrollIndicator={false}
-                    contentContainerStyle={{ paddingBottom: 120 }}
+                    contentContainerStyle={{ paddingBottom: 120, paddingTop: 4 }}
                 >
                     {/* Profile Card */}
-                    <View style={{ backgroundColor: isDark ? '#1f2937' : '#ffffff', borderColor: isDark ? '#374151' : '#f3f4f6' }} className="mx-4 mt-4 rounded-3xl border overflow-hidden shadow-sm">
+                    <View style={{ backgroundColor: cardBg, borderColor: cardBorder }} className="mx-4 mt-4 rounded-3xl border overflow-hidden shadow-sm">
                         <View className="p-5 flex-row items-center">
                             <View className="h-16 w-16 rounded-2xl bg-gray-900 items-center justify-center overflow-hidden mr-4 shadow-sm">
                                 {user?.picture ? (
@@ -320,7 +345,7 @@ export default function SettingsScreen() {
 
                     {/* Account Management Section */}
                     <SettingsSectionHeader title={t('settings.accountManagement')} isDark={isDark} />
-                    <View style={{ backgroundColor: isDark ? '#1f2937' : '#ffffff', borderColor: isDark ? '#374151' : '#f3f4f6' }} className="mx-4 rounded-2xl overflow-hidden border shadow-sm">
+                    <View style={{ backgroundColor: cardBg, borderColor: cardBorder }} className="mx-4 rounded-3xl overflow-hidden border shadow-sm">
                         <SettingsItem
                             icon={CreditCard}
                             iconColor="#2563eb"
@@ -354,7 +379,7 @@ export default function SettingsScreen() {
 
                     {/* Preferences Section */}
                     <SettingsSectionHeader title={t('settings.preferences')} isDark={isDark} />
-                    <View style={{ backgroundColor: isDark ? '#1f2937' : '#ffffff', borderColor: isDark ? '#374151' : '#f3f4f6' }} className="mx-4 rounded-2xl overflow-hidden border shadow-sm">
+                    <View style={{ backgroundColor: cardBg, borderColor: cardBorder }} className="mx-4 rounded-3xl overflow-hidden border shadow-sm">
                         <SettingsItem
                             icon={Bell}
                             iconColor="#f59e0b"
@@ -403,7 +428,7 @@ export default function SettingsScreen() {
 
                     {/* Support Section */}
                     <SettingsSectionHeader title={t('settings.support')} isDark={isDark} />
-                    <View style={{ backgroundColor: isDark ? '#1f2937' : '#ffffff', borderColor: isDark ? '#374151' : '#f3f4f6' }} className="mx-4 rounded-2xl overflow-hidden border shadow-sm">
+                    <View style={{ backgroundColor: cardBg, borderColor: cardBorder }} className="mx-4 rounded-3xl overflow-hidden border shadow-sm">
                         <SettingsItem
                             icon={HelpCircle}
                             iconColor="#6366f1"
@@ -522,7 +547,7 @@ export default function SettingsScreen() {
                     onClose={() => setInfoModal({ ...infoModal, visible: false })}
                     isDark={isDark}
                 />
-            </SafeAreaView>
+            </View>
         </View>
     );
 }

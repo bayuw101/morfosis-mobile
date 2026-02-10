@@ -1,6 +1,7 @@
 import { View, Text, ActivityIndicator, Animated, Image } from "react-native";
 import { useRef, useEffect } from "react";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useTheme } from "../../context/theme-context";
 
 interface FullScreenLoaderProps {
     isLoading: boolean;
@@ -8,13 +9,9 @@ interface FullScreenLoaderProps {
 }
 
 // Full screen overlay loader (for auth transitions)
-// Full screen overlay loader (for auth transitions)
 export function FullScreenLoader({ isLoading, message }: FullScreenLoaderProps) {
     const fadeAnim = useRef(new Animated.Value(0)).current;
-
-    // Scale animation for entrance
     const scaleAnim = useRef(new Animated.Value(0.95)).current;
-    // Pulse animation for logo
     const pulseAnim = useRef(new Animated.Value(1)).current;
 
     useEffect(() => {
@@ -24,7 +21,6 @@ export function FullScreenLoader({ isLoading, message }: FullScreenLoaderProps) 
                 Animated.spring(scaleAnim, { toValue: 1, friction: 8, tension: 40, useNativeDriver: true })
             ]).start();
 
-            // Continuous gentle pulse
             Animated.loop(
                 Animated.sequence([
                     Animated.timing(pulseAnim, { toValue: 1.08, duration: 1200, useNativeDriver: true }),
@@ -37,7 +33,7 @@ export function FullScreenLoader({ isLoading, message }: FullScreenLoaderProps) 
         }
     }, [isLoading]);
 
-    if (!isLoading && Number(JSON.stringify(fadeAnim)) === 0) return null; // Simple check, but pointerEvents="none" is better
+    if (!isLoading && Number(JSON.stringify(fadeAnim)) === 0) return null;
 
     return (
         <Animated.View
@@ -48,15 +44,13 @@ export function FullScreenLoader({ isLoading, message }: FullScreenLoaderProps) 
                 left: 0,
                 right: 0,
                 bottom: 0,
-                zIndex: 999, // Ensure it's on top of everything
-                backgroundColor: 'rgba(255, 255, 255, 0.85)', // Slightly more transparent for glass feel
+                zIndex: 999,
+                backgroundColor: 'rgba(255, 255, 255, 0.85)',
                 alignItems: 'center',
                 justifyContent: 'center',
                 opacity: fadeAnim
             }}
         >
-            {/* Blurry Background effect simulation (optional, using just opacity and color here) */}
-
             <Animated.View
                 style={{
                     backgroundColor: 'white',
@@ -64,7 +58,7 @@ export function FullScreenLoader({ isLoading, message }: FullScreenLoaderProps) 
                     paddingHorizontal: 40,
                     borderRadius: 32,
                     alignItems: 'center',
-                    shadowColor: '#2563eb', // Blue shadow
+                    shadowColor: '#2563eb',
                     shadowOffset: { width: 0, height: 20 },
                     shadowOpacity: 0.15,
                     shadowRadius: 40,
@@ -77,7 +71,7 @@ export function FullScreenLoader({ isLoading, message }: FullScreenLoaderProps) 
                     <View style={{
                         width: 80,
                         height: 80,
-                        backgroundColor: '#eff6ff', // Blue-50
+                        backgroundColor: '#eff6ff',
                         borderRadius: 24,
                         alignItems: 'center',
                         justifyContent: 'center',
@@ -91,7 +85,6 @@ export function FullScreenLoader({ isLoading, message }: FullScreenLoaderProps) 
                     </View>
                 </Animated.View>
 
-                {/* Custom loading dots */}
                 <View style={{ height: 20, marginBottom: 16 }}>
                     <ActivityIndicator size="large" color="#2563eb" />
                 </View>
@@ -101,7 +94,7 @@ export function FullScreenLoader({ isLoading, message }: FullScreenLoaderProps) 
                         marginTop: 8,
                         fontSize: 15,
                         fontWeight: '600',
-                        color: '#1e293b', // Slate-800
+                        color: '#1e293b',
                         textAlign: 'center',
                         letterSpacing: 0.3
                     }}>
@@ -113,14 +106,15 @@ export function FullScreenLoader({ isLoading, message }: FullScreenLoaderProps) 
     );
 }
 
-// Inline loader for content areas (light theme)
+// Inline loader for content areas
 export function InlineLoader({ message = "Loading..." }: { message?: string }) {
+    const { isDark } = useTheme();
     return (
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 40 }}>
             <View style={{
                 width: 64,
                 height: 64,
-                backgroundColor: '#f8fafc',
+                backgroundColor: isDark ? '#1f2937' : '#f8fafc',
                 borderRadius: 16,
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -128,46 +122,66 @@ export function InlineLoader({ message = "Loading..." }: { message?: string }) {
             }}>
                 <ActivityIndicator size="large" color="#3b82f6" />
             </View>
-            <Text style={{ fontSize: 14, color: '#94a3b8', fontWeight: '500' }}>{message}</Text>
+            <Text style={{ fontSize: 14, color: isDark ? '#9ca3af' : '#94a3b8', fontWeight: '500' }}>{message}</Text>
         </View>
     );
 }
 
-// Dark themed loader for AppShell screens
+// Theme-aware screen loader used across all dashboard screens
 export function ScreenLoader({ message = "Loading..." }: { message?: string }) {
     const insets = useSafeAreaInsets();
+    const { isDark } = useTheme();
+
+    const headerBg = isDark ? '#111827' : '#1e40af';
+    const skeletonBg = isDark ? '#374151' : 'rgba(255,255,255,0.2)';
+    const pillBg = isDark ? '#1f2937' : 'rgba(255,255,255,0.15)';
+    const contentBg = isDark ? '#1f2937' : '#f8fafc';
+    const loaderBoxBg = isDark ? '#374151' : '#ffffff';
+    const textColor = isDark ? '#9ca3af' : '#64748b';
 
     return (
-        <View style={{ flex: 1, backgroundColor: '#111827' }}>
+        <View style={{ flex: 1, backgroundColor: headerBg }}>
             {/* Placeholder header skeleton */}
             <View style={{ paddingTop: insets.top, paddingHorizontal: 24, paddingBottom: 16 }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                        <View style={{ height: 44, width: 44, backgroundColor: '#374151', borderRadius: 22 }} />
+                        <View style={{ height: 44, width: 44, backgroundColor: skeletonBg, borderRadius: 22 }} />
                         <View>
-                            <View style={{ height: 10, width: 60, backgroundColor: '#374151', borderRadius: 5, marginBottom: 6 }} />
-                            <View style={{ height: 16, width: 80, backgroundColor: '#374151', borderRadius: 8 }} />
+                            <View style={{ height: 10, width: 60, backgroundColor: skeletonBg, borderRadius: 5, marginBottom: 6 }} />
+                            <View style={{ height: 16, width: 80, backgroundColor: skeletonBg, borderRadius: 8 }} />
                         </View>
                     </View>
-                    <View style={{ height: 32, width: 100, backgroundColor: '#1f2937', borderRadius: 16 }} />
+                    <View style={{ height: 32, width: 100, backgroundColor: pillBg, borderRadius: 16 }} />
                 </View>
             </View>
 
-            {/* Loading content */}
-            <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+            {/* Loading content area with rounded top */}
+            <View style={{
+                flex: 1,
+                backgroundColor: contentBg,
+                borderTopLeftRadius: 28,
+                borderTopRightRadius: 28,
+                alignItems: 'center',
+                justifyContent: 'center',
+            }}>
                 <View style={{ alignItems: 'center' }}>
                     <View style={{
                         height: 64,
                         width: 64,
-                        backgroundColor: '#1f2937',
+                        backgroundColor: loaderBoxBg,
                         borderRadius: 16,
                         alignItems: 'center',
                         justifyContent: 'center',
-                        marginBottom: 16
+                        marginBottom: 16,
+                        shadowColor: '#000',
+                        shadowOffset: { width: 0, height: 2 },
+                        shadowOpacity: isDark ? 0 : 0.06,
+                        shadowRadius: 8,
+                        elevation: isDark ? 0 : 3,
                     }}>
                         <ActivityIndicator size="large" color="#3b82f6" />
                     </View>
-                    <Text style={{ fontSize: 14, color: '#9ca3af', fontWeight: '500' }}>{message}</Text>
+                    <Text style={{ fontSize: 14, color: textColor, fontWeight: '500' }}>{message}</Text>
                 </View>
             </View>
         </View>

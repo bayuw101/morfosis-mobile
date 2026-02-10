@@ -1,12 +1,14 @@
-import { View, Text, Modal, Pressable, TextInput, ActivityIndicator, Alert, KeyboardAvoidingView, Platform, ScrollView } from "react-native";
+import { View, Text, Modal, Pressable, ScrollView, TextInput, ActivityIndicator, Alert, KeyboardAvoidingView, Platform, TouchableOpacity } from "react-native";
 import { useState, useEffect, useCallback } from "react";
 import DraggableFlatList, { ScaleDecorator, RenderItemParams } from "react-native-draggable-flatlist";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
-import { X, Plus, GripVertical, Trash2, Pencil, Check } from "lucide-react-native";
+import { X, Plus, GripVertical, Trash2, Pencil, Check, ChevronRight } from "lucide-react-native";
 import { API_URL } from "../../constants/config";
 import { getAuthHeader } from "../../lib/auth";
 import { cn } from "../../lib/utils";
 import { useFamily } from "../../context/family-context";
+import { useTheme } from "../../context/theme-context";
+import { useLanguage } from "../../context/language-context";
 
 interface Category {
     id: string;
@@ -24,33 +26,55 @@ interface CategoryManagementModalProps {
 
 export function CategoryManagementModal({ visible, onClose }: CategoryManagementModalProps) {
     const { families, activeFamily } = useFamily();
-    const [selectedFamilyId, setSelectedFamilyId] = useState<string>("");
-    const [activeTab, setActiveTab] = useState<'expense' | 'income'>('expense');
+    const { isDark } = useTheme();
+    const { t } = useLanguage();
+
+    // View State
+    const [view, setView] = useState<"list" | "create" | "edit">("list");
+
+    // Data State
     const [categories, setCategories] = useState<Category[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
+    const [selectedFamilyId, setSelectedFamilyId] = useState<string>("");
+    const [activeTab, setActiveTab] = useState<'expense' | 'income'>('expense');
 
     // Form State
-    const [showForm, setShowForm] = useState(false);
-    const [editCategory, setEditCategory] = useState<Category | null>(null);
-    const [catName, setCatName] = useState("");
+    const [editingCategory, setEditingCategory] = useState<Category | null>(null);
+    const [formName, setFormName] = useState("");
+
+    // Theme colors (matched to Account Modal)
+    const sheetBg = isDark ? '#1f2937' : '#ffffff';
+    const headerBg = isDark ? '#1f2937' : '#ffffff';
+    const headerBorder = isDark ? '#374151' : '#f3f4f6';
+    const titleColor = isDark ? '#f9fafb' : '#111827';
+    const labelColor = isDark ? '#9ca3af' : '#6b7280';
+    const textColor = isDark ? '#d1d5db' : '#374151';
+    const cardBg = isDark ? '#374151' : '#ffffff';
+    const cardBorder = isDark ? '#4b5563' : '#f3f4f6';
+    const inputBg = isDark ? '#374151' : '#f9fafb';
+    const inputBorder = isDark ? '#4b5563' : '#e5e7eb';
+    const closeBtnBg = isDark ? '#374151' : '#f3f4f6';
+    const closeIconColor = isDark ? '#d1d5db' : '#374151';
+    const handleColor = isDark ? '#4b5563' : '#d1d5db';
+    const skeletonBg = isDark ? '#374151' : '#e5e7eb';
+    const skeletonLight = isDark ? '#4b5563' : '#f3f4f6';
 
     const fetchCategories = useCallback(async () => {
         setIsLoading(true);
         try {
             const headers = await getAuthHeader();
-            const res = await fetch(`${API_URL}/mobile/categories`, { headers });
+            const res = await fetch(`${API_URL}/mobile/categories?t=${Date.now()}`, { headers });
             if (res.ok) {
                 const data = await res.json();
-                // Filter only custom categories for management (family_id != null)
-                // And filter by type
+                // Filter only by active tab + family
                 const filtered = data
                     .filter((c: Category) =>
                         (c.type === activeTab || c.type === 'both') &&
                         !!c.family_id &&
                         (!selectedFamilyId || c.family_id === selectedFamilyId)
                     )
-                    .sort((a: Category, b: Category) => a.sort_order - b.sort_order);
+                    .sort((a: Category, b: Category) => (a.sort_order || 0) - (b.sort_order || 0));
                 setCategories(filtered);
             }
         } catch (e) {
@@ -58,76 +82,97 @@ export function CategoryManagementModal({ visible, onClose }: CategoryManagement
         } finally {
             setIsLoading(false);
         }
-    }, [activeTab]);
+    }, [activeTab, selectedFamilyId]);
 
+    // Initialize
     useEffect(() => {
         if (visible) {
             if (activeFamily && !selectedFamilyId) {
                 setSelectedFamilyId(activeFamily.id);
             }
+            setView("list");
             fetchCategories();
         }
-    }, [visible, fetchCategories, activeFamily]);
+    }, [visible, activeFamily]);
 
-    // Re-fetch or re-filter when selected family changes
+    // Re-fetch when dependencies change
     useEffect(() => {
-        if (visible) fetchCategories();
-    }, [selectedFamilyId]);
+        if (visible && selectedFamilyId) fetchCategories();
+    }, [selectedFamilyId, activeTab, fetchCategories]);
+
+    const handleNewCategory = () => {
+        setEditingCategory(null);
+        setFormName("");
+        setView("create");
+    };
+
+    const handleEditCategory = (cat: Category) => {
+        setEditingCategory(cat);
+        setFormName(cat.name);
+        setView("edit");
+    };
 
     const handleSave = async () => {
-        if (!catName.trim()) return;
+        if (!formName.trim()) return;
         setIsSaving(true);
         try {
             const headers = await getAuthHeader();
-            if (editCategory) {
-                // Update
-                const res = await fetch(`${API_URL}/mobile/categories/${editCategory.id}`, {
+            const payload = {
+                name: formName.trim(),
+                type: activeTab, // Defaults to current tab
+                family_id: selectedFamilyId
+            };
+
+            if (editingCategory) {
+                const res = await fetch(`${API_URL}/mobile/categories/${editingCategory.id}`, {
                     method: 'PUT',
                     headers: { ...headers, 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ name: catName, type: activeTab })
+                    body: JSON.stringify({ ...payload, type: editingCategory.type }) // Keep original type if editing? Or update? Let's use payload type if we want to allow changing type, but UI doesn't support changing type effectively here. For simplicity, just update name.
+                    // Actually, let's just send name and type.
                 });
                 if (!res.ok) throw new Error("Failed to update");
             } else {
-                // Create
-                if (!selectedFamilyId) return; // Should not happen if UI is correct
                 const res = await fetch(`${API_URL}/mobile/categories`, {
                     method: 'POST',
                     headers: { ...headers, 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        name: catName,
-                        type: activeTab,
-                        family_id: selectedFamilyId
-                    })
+                    body: JSON.stringify(payload)
                 });
                 if (!res.ok) throw new Error("Failed to create");
             }
-            setShowForm(false);
-            setCatName("");
-            setEditCategory(null);
+
+            setView("list");
+            setFormName("");
+            setEditingCategory(null);
             fetchCategories();
         } catch (e) {
-            Alert.alert("Error", "Failed to save category");
+            Alert.alert(t('common.error'), t('categoryManager.failedSave'));
         } finally {
             setIsSaving(false);
         }
     };
 
-    const handleDelete = async (id: string) => {
-        Alert.alert("Delete Category", "Are you sure? This action cannot be undone.", [
-            { text: "Cancel", style: "cancel" },
+    const handleDelete = async () => {
+        if (!editingCategory) return;
+        Alert.alert(t('categoryManager.deleteCategory'), t('categoryManager.deleteCategoryMsg'), [
+            { text: t('common.cancel'), style: "cancel" },
             {
-                text: "Delete",
+                text: t('common.delete'),
                 style: "destructive",
                 onPress: async () => {
+                    setIsSaving(true);
                     try {
                         const headers = await getAuthHeader();
-                        await fetch(`${API_URL}/mobile/categories/${id}`, {
+                        await fetch(`${API_URL}/mobile/categories/${editingCategory.id}`, {
                             method: 'DELETE',
                             headers
                         });
+                        setView("list");
+                        setEditingCategory(null);
                         fetchCategories();
                     } catch (e) {
-                        Alert.alert("Error", "Failed to delete");
+                        Alert.alert(t('common.error'), t('categoryManager.failedDelete'));
+                    } finally {
+                        setIsSaving(false);
                     }
                 }
             }
@@ -135,198 +180,243 @@ export function CategoryManagementModal({ visible, onClose }: CategoryManagement
     };
 
     const handleDragEnd = async ({ data }: { data: Category[] }) => {
-        setCategories(data); // Optimistic update
+        setCategories(data);
         try {
             const headers = await getAuthHeader();
-            // Assuming backend accepts a list of {id, sort_order} or similar
-            // If backend mirrors web, it might take a list of updates
             const updates = data.map((c, index) => ({ id: c.id, sort_order: index }));
 
             await fetch(`${API_URL}/mobile/categories/reorder`, {
-                method: 'PATCH', // Or PUT, matching web action
+                method: 'PATCH',
                 headers: { ...headers, 'Content-Type': 'application/json' },
                 body: JSON.stringify({ updates })
             });
         } catch (e) {
             console.error("Reorder failed", e);
-            fetchCategories(); // Revert
+            fetchCategories();
         }
     };
 
-    const openCreate = () => {
-        setEditCategory(null);
-        setCatName("");
-        setShowForm(true);
-    };
+    const renderSkeleton = () => (
+        <View>
+            <View style={{ backgroundColor: skeletonBg }} className="h-7 w-48 rounded-lg mb-6" />
+            {[1, 2, 3].map(i => (
+                <View key={i} style={{ backgroundColor: skeletonLight }} className="rounded-2xl p-4 mb-3 flex-row items-center">
+                    <View style={{ backgroundColor: skeletonBg }} className="h-5 w-5 rounded mr-3" />
+                    <View style={{ backgroundColor: skeletonBg }} className="h-4 w-32 rounded" />
+                </View>
+            ))}
+        </View>
+    );
 
-    const openEdit = (cat: Category) => {
-        setEditCategory(cat);
-        setCatName(cat.name);
-        setShowForm(true);
-    };
-
-    const renderItem = ({ item, drag, isActive }: RenderItemParams<Category>) => {
-        return (
-            <ScaleDecorator>
+    const renderListView = () => (
+        <View className="flex-1">
+            {/* Header */}
+            <View className="flex-row items-center justify-between mb-2">
+                <Text style={{ color: titleColor }} className="text-xl font-bold">{t('categoryManager.title')}</Text>
                 <Pressable
-                    onLongPress={drag}
-                    disabled={isActive}
-                    className={cn(
-                        "bg-white flex-row items-center p-4 mb-2 rounded-2xl border ",
-                        isActive ? "border-blue-500 shadow-lg scale-105 z-10" : "border-gray-100 shadow-sm"
-                    )}
+                    onPress={handleNewCategory}
+                    style={{ backgroundColor: closeBtnBg }}
+                    className="p-2 rounded-full"
                 >
-                    <Pressable onPressIn={drag} className="p-2 -ml-2 mr-2">
-                        <GripVertical size={20} color="#9ca3af" />
-                    </Pressable>
-
-                    <View className="flex-1">
-                        <Text className="text-gray-900 font-semibold text-[15px]">{item.name}</Text>
-                        <Text className="text-gray-400 text-xs mt-0.5 capitalize">{item.type}</Text>
-                    </View>
-
-                    <View className="flex-row items-center gap-1">
-                        <Pressable onPress={() => openEdit(item)} className="p-2 bg-gray-50 rounded-lg active:bg-gray-100">
-                            <Pencil size={18} color="#4b5563" />
-                        </Pressable>
-                        <Pressable onPress={() => handleDelete(item.id)} className="p-2 bg-red-50 rounded-lg active:bg-red-100">
-                            <Trash2 size={18} color="#ef4444" />
-                        </Pressable>
-                    </View>
+                    <Plus size={20} color={closeIconColor} />
                 </Pressable>
-            </ScaleDecorator>
-        );
-    };
+            </View>
 
-    return (
-        <Modal visible={visible} animationType="slide" presentationStyle="pageSheet">
-            <GestureHandlerRootView className="flex-1 bg-gray-50">
-                <View className={cn("bg-white px-5 pb-4 border-b border-gray-100 flex-row items-center justify-between", Platform.OS === 'android' ? "pt-12" : "pt-4")}>
-                    <Text className="text-xl font-bold text-gray-900">Categories</Text>
-                    <Pressable onPress={onClose} className="bg-gray-100 p-2 rounded-full">
-                        <X size={20} color="#374151" />
-                    </Pressable>
-                </View>
-
-                {/* Family Selector */}
-                <View className="px-4 py-3 bg-white border-b border-gray-50">
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
-                        {families.map(f => (
-                            <Pressable
-                                key={f.id}
-                                onPress={() => setSelectedFamilyId(f.id)}
-                                className={cn(
-                                    "px-4 py-2 rounded-full border",
-                                    selectedFamilyId === f.id
-                                        ? "bg-gray-900 border-gray-900"
-                                        : "bg-white border-gray-200"
-                                )}
+            {/* Family Selector */}
+            <View className="mb-4">
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
+                    {families.map(f => (
+                        <Pressable
+                            key={f.id}
+                            onPress={() => setSelectedFamilyId(f.id)}
+                            style={selectedFamilyId === f.id
+                                ? { backgroundColor: isDark ? '#3b82f6' : '#111827', borderColor: isDark ? '#3b82f6' : '#111827' }
+                                : { backgroundColor: isDark ? '#374151' : '#ffffff', borderColor: isDark ? '#4b5563' : '#e5e7eb' }
+                            }
+                            className="px-4 py-2 rounded-full border"
+                        >
+                            <Text
+                                style={{ color: selectedFamilyId === f.id ? '#ffffff' : textColor }}
+                                className="text-xs font-bold"
                             >
-                                <Text className={cn(
-                                    "text-xs font-bold",
-                                    selectedFamilyId === f.id ? "text-white" : "text-gray-600"
-                                )}>
-                                    {f.name}
-                                </Text>
-                            </Pressable>
-                        ))}
-                    </ScrollView>
-                </View>
+                                {f.name}
+                            </Text>
+                        </Pressable>
+                    ))}
+                </ScrollView>
+            </View>
 
-                {/* Tabs */}
-                <View className="flex-row p-4 gap-3 bg-white border-b border-gray-50">
-                    <Pressable
-                        onPress={() => setActiveTab('expense')}
-                        className={cn(
-                            "flex-1 py-2.5 rounded-xl items-center justify-center border",
-                            activeTab === 'expense' ? "bg-gray-900 border-gray-900" : "bg-white border-gray-200"
-                        )}
-                    >
-                        <Text className={cn("font-bold text-sm", activeTab === 'expense' ? "text-white" : "text-gray-600")}>Expense</Text>
-                    </Pressable>
-                    <Pressable
-                        onPress={() => setActiveTab('income')}
-                        className={cn(
-                            "flex-1 py-2.5 rounded-xl items-center justify-center border",
-                            activeTab === 'income' ? "bg-gray-900 border-gray-900" : "bg-white border-gray-200"
-                        )}
-                    >
-                        <Text className={cn("font-bold text-sm", activeTab === 'income' ? "text-white" : "text-gray-600")}>Income</Text>
-                    </Pressable>
-                </View>
+            {/* Tabs */}
+            <View style={{ backgroundColor: cardBg, borderColor: inputBorder }} className="flex-row p-1 rounded-xl mb-4 border">
+                <Pressable
+                    onPress={() => setActiveTab('expense')}
+                    style={{ backgroundColor: activeTab === 'expense' ? (isDark ? '#4b5563' : '#ffffff') : 'transparent' }}
+                    className={cn("flex-1 py-2 rounded-lg items-center justify-center", activeTab === 'expense' && !isDark && "shadow-sm")}
+                >
+                    <Text style={{ color: activeTab === 'expense' ? (isDark ? '#ffffff' : '#111827') : labelColor }} className="font-bold text-xs">
+                        {t('categoryManager.expense')}
+                    </Text>
+                </Pressable>
+                <Pressable
+                    onPress={() => setActiveTab('income')}
+                    style={{ backgroundColor: activeTab === 'income' ? (isDark ? '#4b5563' : '#ffffff') : 'transparent' }}
+                    className={cn("flex-1 py-2 rounded-lg items-center justify-center", activeTab === 'income' && !isDark && "shadow-sm")}
+                >
+                    <Text style={{ color: activeTab === 'income' ? (isDark ? '#ffffff' : '#111827') : labelColor }} className="font-bold text-xs">
+                        {t('categoryManager.income')}
+                    </Text>
+                </Pressable>
+            </View>
 
-                {isLoading ? (
-                    <View className="flex-1 items-center justify-center">
-                        <ActivityIndicator size="large" color="#3b82f6" />
-                    </View>
-                ) : (
+            {/* List */}
+            <View className="flex-1">
+                {categories.length > 0 ? (
                     <DraggableFlatList
                         data={categories}
                         onDragEnd={handleDragEnd}
                         keyExtractor={(item) => item.id}
-                        renderItem={renderItem}
-                        contentContainerStyle={{ padding: 16, paddingBottom: 100 }}
-                        ListEmptyComponent={
-                            <View className="items-center justify-center py-12">
-                                <Text className="text-gray-400 font-medium">No custom categories found</Text>
-                                <Text className="text-gray-400 text-xs mt-1">Tap + to add one</Text>
-                            </View>
-                        }
-                    />
-                )}
-
-                {/* FAB */}
-                <Pressable
-                    onPress={openCreate}
-                    className="absolute bottom-10 right-6 h-14 w-14 bg-blue-600 rounded-full items-center justify-center shadow-xl shadow-blue-600/30"
-                >
-                    <Plus size={28} color="white" />
-                </Pressable>
-
-                {/* Edit Form Modal */}
-                <Modal visible={showForm} transparent animationType="fade">
-                    <KeyboardAvoidingView
-                        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-                        className="flex-1 justify-end bg-black/50"
-                    >
-                        <Pressable className="flex-1" onPress={() => setShowForm(false)} />
-                        <View className="bg-white rounded-t-[32px] p-6 pb-10">
-                            <View className="flex-row justify-between items-center mb-6">
-                                <Text className="text-xl font-bold text-gray-900">{editCategory ? "Edit Category" : "New Category"}</Text>
-                                <Pressable onPress={() => setShowForm(false)} className="bg-gray-100 p-2 rounded-full">
-                                    <X size={20} color="#374151" />
-                                </Pressable>
-                            </View>
-
-                            <Text className="text-sm font-bold text-gray-700 mb-2">Category Name</Text>
-                            <TextInput
-                                className="bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3.5 text-gray-900 text-base"
-                                placeholder="e.g. Groceries"
-                                value={catName}
-                                onChangeText={setCatName}
-                                autoFocus
-                            />
-
-                            <Pressable
-                                onPress={handleSave}
-                                disabled={isSaving || !catName.trim()}
-                                className={cn(
-                                    "mt-6 h-14 bg-gray-900 rounded-2xl items-center justify-center flex-row gap-2 shadow-lg shadow-gray-900/10",
-                                    (isSaving || !catName.trim()) && "opacity-50"
-                                )}
+                        contentContainerStyle={{ paddingBottom: 100 }}
+                        renderItem={({ item, drag, isActive }) => (
+                            <TouchableOpacity
+                                onLongPress={drag}
+                                disabled={isActive}
+                                onPress={() => handleEditCategory(item)}
+                                activeOpacity={0.7}
+                                style={{
+                                    backgroundColor: isDark ? '#374151' : '#ffffff',
+                                    borderRadius: 16,
+                                    borderWidth: 1,
+                                    borderColor: isActive ? '#3b82f6' : (isDark ? '#4b5563' : '#f3f4f6'),
+                                    padding: 16,
+                                    marginBottom: 10,
+                                    flexDirection: 'row',
+                                    alignItems: 'center',
+                                    elevation: isActive ? 4 : 0,
+                                    zIndex: isActive ? 10 : 0,
+                                }}
                             >
-                                {isSaving ? (
-                                    <ActivityIndicator color="white" />
-                                ) : (
-                                    <>
-                                        <Check size={20} color="white" strokeWidth={2.5} />
-                                        <Text className="text-white font-bold text-base">Save Category</Text>
-                                    </>
-                                )}
-                            </Pressable>
+                                <View className="mr-3">
+                                    <GripVertical size={20} color={isDark ? '#6b7280' : '#9ca3af'} />
+                                </View>
+
+                                <View className="flex-1">
+                                    <Text style={{ color: titleColor }} className="font-bold text-[15px]">{item.name}</Text>
+                                    <View className="flex-row items-center mt-1">
+                                        <View style={{ backgroundColor: item.type === 'expense' ? 'rgba(239,68,68,0.1)' : 'rgba(34,197,94,0.1)' }} className="px-1.5 py-0.5 rounded mr-2">
+                                            <Text style={{ color: item.type === 'expense' ? '#ef4444' : '#22c55e' }} className="text-[10px] uppercase font-bold">{item.type}</Text>
+                                        </View>
+                                    </View>
+                                </View>
+
+                                <ChevronRight size={16} color={labelColor} />
+                            </TouchableOpacity>
+                        )}
+                    />
+                ) : (
+                    <View className="items-center justify-center py-12 px-6">
+                        <View style={{ backgroundColor: isDark ? '#374151' : '#f3f4f6' }} className="h-16 w-16 rounded-full items-center justify-center mb-4">
+                            <Plus size={24} color={labelColor} />
                         </View>
-                    </KeyboardAvoidingView>
-                </Modal>
+                        <Text style={{ color: titleColor }} className="font-semibold text-center mb-1">{t('categoryManager.noCustomCategories')}</Text>
+                        <Text style={{ color: labelColor }} className="text-sm text-center">{t('categoryManager.tapPlusToAdd')}</Text>
+                    </View>
+                )}
+            </View>
+        </View>
+    );
+
+    const renderFormView = () => {
+        const isEditing = view === "edit";
+
+        return (
+            <View>
+                {/* Header */}
+                <View className="flex-row items-center mb-6">
+                    <Pressable onPress={() => { setView("list"); setFormName(""); }} style={{ backgroundColor: closeBtnBg }} className="mr-3 p-2 rounded-full">
+                        <X size={16} color={closeIconColor} />
+                    </Pressable>
+                    <Text style={{ color: titleColor }} className="text-xl font-bold flex-1">
+                        {isEditing ? t('categoryManager.editCategory') : t('categoryManager.newCategory')}
+                    </Text>
+                    {isEditing && (
+                        <Pressable onPress={handleDelete} style={{ backgroundColor: isDark ? '#451a1a' : '#fef2f2' }} className="p-2 rounded-full">
+                            <Trash2 size={18} color="#ef4444" />
+                        </Pressable>
+                    )}
+                </View>
+
+                <ScrollView
+                    showsVerticalScrollIndicator={false}
+                    className="mb-4"
+                    keyboardDismissMode="interactive"
+                >
+                    {/* Name Input */}
+                    <View className="mb-5">
+                        <Text style={{ color: textColor }} className="text-sm font-bold mb-2">{t('categoryManager.categoryName')}</Text>
+                        <TextInput
+                            style={{ backgroundColor: inputBg, borderColor: inputBorder, color: titleColor }}
+                            className="border rounded-xl p-4"
+                            placeholder={t('categoryManager.categoryNamePlaceholder')}
+                            placeholderTextColor={labelColor}
+                            value={formName}
+                            onChangeText={setFormName}
+                            autoFocus
+                        />
+                    </View>
+
+                    {/* Type Info (ReadOnly for now, based on tab) */}
+                    <View className="mb-5">
+                        <Text style={{ color: textColor }} className="text-sm font-bold mb-2">{t('categoryManager.categoryType')}</Text>
+                        <View style={{ backgroundColor: inputBg, borderColor: inputBorder }} className="border rounded-xl p-4 flex-row items-center">
+                            <Text style={{ color: titleColor }} className="font-medium capitalize">{activeTab}</Text>
+                        </View>
+                        <Text style={{ color: labelColor }} className="text-xs mt-2 ml-1">Creating in {activeTab} list.</Text>
+                    </View>
+                </ScrollView>
+
+                {/* Save Button */}
+                <Pressable
+                    onPress={handleSave}
+                    disabled={isSaving || !formName.trim()}
+                    style={{
+                        backgroundColor: (isSaving || !formName.trim())
+                            ? (isDark ? '#4b5563' : '#d1d5db')
+                            : (isDark ? '#3b82f6' : '#111827')
+                    }}
+                    className="w-full h-14 rounded-2xl items-center justify-center mt-4"
+                >
+                    {isSaving ? (
+                        <ActivityIndicator color="white" />
+                    ) : (
+                        <Text className="text-white font-bold text-[16px]">
+                            {isEditing ? t('categoryManager.saveCategory') : t('categoryManager.createCategory')}
+                        </Text>
+                    )}
+                </Pressable>
+            </View>
+        );
+    };
+
+    return (
+        <Modal visible={visible} animationType="slide" transparent>
+            <GestureHandlerRootView className="flex-1">
+                <KeyboardAvoidingView
+                    behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                    className="flex-1 justify-end bg-black/40"
+                >
+                    <Pressable className="flex-1" onPress={onClose} />
+                    <View style={{ backgroundColor: sheetBg }} className="rounded-t-[32px] p-6 pb-10 h-[80%]">
+                        {/* iOS-style handle */}
+                        <View style={{ backgroundColor: handleColor }} className="w-10 h-1 rounded-full self-center mb-6" />
+
+                        {isLoading ? renderSkeleton() : (
+                            <>
+                                {view === 'list' && renderListView()}
+                                {(view === 'create' || view === 'edit') && renderFormView()}
+                            </>
+                        )}
+                    </View>
+                </KeyboardAvoidingView>
             </GestureHandlerRootView>
         </Modal>
     );

@@ -20,9 +20,9 @@ interface TransactionFormModalProps {
 }
 
 const TRANSACTION_TYPES = [
-    { key: 'expense', label: 'Expense', icon: ArrowUpRight, color: '#ef4444' },
-    { key: 'income', label: 'Income', icon: ArrowDownLeft, color: '#22c55e' },
-    { key: 'transfer', label: 'Transfer', icon: ArrowRightLeft, color: '#3b82f6' },
+    { key: 'expense', labelKey: 'transactionTypes.expense', icon: ArrowUpRight, color: '#ef4444' },
+    { key: 'income', labelKey: 'transactionTypes.income', icon: ArrowDownLeft, color: '#22c55e' },
+    { key: 'transfer', labelKey: 'transactionTypes.transfer', icon: ArrowRightLeft, color: '#3b82f6' },
 ] as const;
 
 export function TransactionFormModal({ visible, onClose, onSuccess, initialType = 'expense' }: TransactionFormModalProps) {
@@ -164,11 +164,11 @@ export function TransactionFormModal({ visible, onClose, onSuccess, initialType 
 
     const handleSubmit = async () => {
         if (!amount || !selectedAccount) {
-            alert("Please enter amount and select account");
+            alert(t('transactionForm.enterAmountAndAccount'));
             return;
         }
         if (type === 'transfer' && !selectedTargetAccount) {
-            alert("Please select target account");
+            alert(t('transactionForm.selectTargetAccount'));
             return;
         }
 
@@ -210,7 +210,7 @@ export function TransactionFormModal({ visible, onClose, onSuccess, initialType 
             }
         } catch (error) {
             console.error("Submit error:", error);
-            alert("Network error");
+            alert(t('transactionForm.networkError'));
         } finally {
             setIsSubmitting(false);
         }
@@ -245,14 +245,14 @@ export function TransactionFormModal({ visible, onClose, onSuccess, initialType 
 
                         {/* Type Tabs */}
                         <View style={{ flexDirection: 'row', backgroundColor: isDark ? '#1f2937' : '#f3f4f6', padding: 4, borderRadius: 12 }}>
-                            {TRANSACTION_TYPES.map((t) => {
-                                const isActive = type === t.key;
-                                const Icon = t.icon;
+                            {TRANSACTION_TYPES.map((tt) => {
+                                const isActive = type === tt.key;
+                                const Icon = tt.icon;
 
                                 return (
                                     <Pressable
-                                        key={t.key}
-                                        onPress={() => setType(t.key as any)}
+                                        key={tt.key}
+                                        onPress={() => setType(tt.key as any)}
 
                                         style={{
                                             flex: 1,
@@ -272,13 +272,13 @@ export function TransactionFormModal({ visible, onClose, onSuccess, initialType 
                                             })
                                         }}
                                     >
-                                        <Icon size={16} color={isActive ? t.color : "#94a3b8"} strokeWidth={2.5} />
+                                        <Icon size={16} color={isActive ? tt.color : "#94a3b8"} strokeWidth={2.5} />
                                         <Text style={{
                                             fontWeight: '600',
                                             fontSize: 12,
                                             color: isActive ? (isDark ? '#f9fafb' : '#111827') : '#9ca3af'
                                         }}>
-                                            {t.label}
+                                            {t(tt.labelKey)}
                                         </Text>
                                     </Pressable>
                                 );
@@ -288,7 +288,7 @@ export function TransactionFormModal({ visible, onClose, onSuccess, initialType 
 
                     {isLoading ? (
                         <View className="h-52 items-center justify-center">
-                            <InlineLoader message="Loading details..." />
+                            <InlineLoader message={t('transactionForm.loadingDetails')} />
                         </View>
                     ) : (
                         <ScrollView
@@ -299,7 +299,7 @@ export function TransactionFormModal({ visible, onClose, onSuccess, initialType 
                         >
                             {/* Amount Input - Beautiful Design */}
                             <View className="mb-5">
-                                <Text style={{ color: isDark ? '#9ca3af' : '#6b7280' }} className="text-[10px] font-bold uppercase mb-2 ml-1">Amount</Text>
+                                <Text style={{ color: isDark ? '#9ca3af' : '#6b7280' }} className="text-[10px] font-bold uppercase mb-2 ml-1">{t('transactionForm.amount')}</Text>
                                 <View style={{ backgroundColor: isDark ? '#374151' : '#ffffff', borderColor: isDark ? '#4b5563' : '#e5e7eb' }} className="rounded-2xl border overflow-hidden">
                                     <View className="px-5 py-4 flex-row items-center">
                                         <Text style={{ color: isDark ? '#6b7280' : '#9ca3af' }} className="font-bold text-xl mr-2">Rp</Text>
@@ -324,7 +324,7 @@ export function TransactionFormModal({ visible, onClose, onSuccess, initialType 
                             {/* Source Account */}
                             <View className="mb-4">
                                 <Text style={{ color: isDark ? '#9ca3af' : '#6b7280' }} className="text-[10px] font-bold uppercase mb-2 ml-1">
-                                    {type === 'transfer' ? 'From Account' : 'Account'}
+                                    {type === 'transfer' ? t('transactionForm.fromAccount') : t('transactionForm.account')}
                                 </Text>
                                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
                                     {accounts.map(acc => {
@@ -359,7 +359,7 @@ export function TransactionFormModal({ visible, onClose, onSuccess, initialType 
                             {/* Target Account (Transfer) */}
                             {type === 'transfer' && (
                                 <View className="mb-4">
-                                    <Text style={{ color: isDark ? '#9ca3af' : '#6b7280' }} className="text-[10px] font-bold uppercase mb-2 ml-1">To Account</Text>
+                                    <Text style={{ color: isDark ? '#9ca3af' : '#6b7280' }} className="text-[10px] font-bold uppercase mb-2 ml-1">{t('transactionForm.toAccount')}</Text>
                                     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
                                         {accounts.filter(a => a.id !== selectedAccount?.id).map(acc => {
                                             const isSelected = selectedTargetAccount?.id === acc.id;
@@ -389,7 +389,7 @@ export function TransactionFormModal({ visible, onClose, onSuccess, initialType 
                                         <Calendar size={16} color="#6366f1" />
                                     </View>
                                     <View className="flex-1">
-                                        <Text style={{ color: isDark ? '#6b7280' : '#9ca3af' }} className="text-[9px] font-bold uppercase">Date</Text>
+                                        <Text style={{ color: isDark ? '#6b7280' : '#9ca3af' }} className="text-[9px] font-bold uppercase">{t('transactionForm.date')}</Text>
                                         <Text style={{ color: isDark ? '#f9fafb' : '#111827' }} className="font-semibold text-[13px]">
                                             {date.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}
                                         </Text>
@@ -413,7 +413,7 @@ export function TransactionFormModal({ visible, onClose, onSuccess, initialType 
                             {/* Budget Planning (Expense Only) */}
                             {type === 'expense' && (
                                 <View className="mb-4">
-                                    <Text style={{ color: isDark ? '#9ca3af' : '#6b7280' }} className="text-[10px] font-bold uppercase mb-2 ml-1">Planning</Text>
+                                    <Text style={{ color: isDark ? '#9ca3af' : '#6b7280' }} className="text-[10px] font-bold uppercase mb-2 ml-1">{t('transactionForm.planning')}</Text>
 
                                     {budgets.length > 0 ? (
                                         <View style={{ backgroundColor: isDark ? '#374151' : '#ffffff', borderColor: isDark ? '#4b5563' : '#e5e7eb' }} className="rounded-xl border p-3">
@@ -422,10 +422,10 @@ export function TransactionFormModal({ visible, onClose, onSuccess, initialType 
                                                     <View style={{ backgroundColor: isDark ? '#451a03' : '#fef3c7' }} className="h-8 w-8 rounded-lg items-center justify-center">
                                                         <Target size={14} color="#d97706" />
                                                     </View>
-                                                    <Text style={{ color: isDark ? '#f9fafb' : '#1f2937' }} className="font-semibold text-[13px]">Budget Plan</Text>
+                                                    <Text style={{ color: isDark ? '#f9fafb' : '#1f2937' }} className="font-semibold text-[13px]">{t('transactionForm.budgetPlan')}</Text>
                                                 </View>
                                                 <View className="flex-row items-center gap-2">
-                                                    <Text style={{ color: isDark ? '#9ca3af' : '#6b7280' }} className="text-[10px]">Unplanned</Text>
+                                                    <Text style={{ color: isDark ? '#9ca3af' : '#6b7280' }} className="text-[10px]">{t('transactionForm.unplanned')}</Text>
                                                     <Switch
                                                         value={isUnplanned}
                                                         onValueChange={setIsUnplanned}
@@ -455,15 +455,15 @@ export function TransactionFormModal({ visible, onClose, onSuccess, initialType 
                                             )}
                                         </View>
                                     ) : (
-                                        <View className="bg-amber-50 rounded-xl border border-amber-200 p-4">
+                                        <View style={{ backgroundColor: isDark ? '#451a03' : '#fffbeb', borderColor: isDark ? '#78350f' : '#fde68a' }} className="rounded-xl border p-4">
                                             <View className="flex-row items-start gap-3">
-                                                <View className="h-8 w-8 bg-amber-100 rounded-lg items-center justify-center mt-0.5">
+                                                <View style={{ backgroundColor: isDark ? '#78350f' : '#fef3c7' }} className="h-8 w-8 rounded-lg items-center justify-center mt-0.5">
                                                     <AlertCircle size={16} color="#d97706" />
                                                 </View>
                                                 <View className="flex-1">
-                                                    <Text className="font-semibold text-amber-800 text-sm mb-1">No Budget Plan</Text>
-                                                    <Text className="text-amber-700 text-xs leading-relaxed">
-                                                        We recommend creating a budget plan to track your spending limits.
+                                                    <Text style={{ color: isDark ? '#fbbf24' : '#92400e' }} className="font-semibold text-sm mb-1">{t('transactionForm.noBudgetPlan')}</Text>
+                                                    <Text style={{ color: isDark ? '#d97706' : '#b45309' }} className="text-xs leading-relaxed">
+                                                        {t('transactionForm.noBudgetPlanDesc')}
                                                     </Text>
                                                 </View>
                                             </View>
@@ -475,14 +475,14 @@ export function TransactionFormModal({ visible, onClose, onSuccess, initialType 
                             {/* Category Selection */}
                             {type !== 'transfer' && (
                                 <View className="mb-4">
-                                    <Text style={{ color: isDark ? '#9ca3af' : '#6b7280' }} className="text-[10px] font-bold uppercase mb-2 ml-1">Category</Text>
+                                    <Text style={{ color: isDark ? '#9ca3af' : '#6b7280' }} className="text-[10px] font-bold uppercase mb-2 ml-1">{t('transactionForm.category')}</Text>
 
                                     <View style={{ backgroundColor: isDark ? '#374151' : '#ffffff', borderColor: isDark ? '#4b5563' : '#e5e7eb' }} className="mb-2 flex-row items-center rounded-lg px-3 py-2 border">
                                         <Search size={14} color="#9ca3af" />
                                         <TextInput
                                             className="flex-1 ml-2 text-[13px]"
                                             style={{ color: isDark ? '#f9fafb' : '#111827' }}
-                                            placeholder="Search categories..."
+                                            placeholder={t('transactionForm.searchCategories')}
                                             placeholderTextColor={isDark ? '#6b7280' : '#9ca3af'}
                                             value={searchQuery}
                                             onChangeText={setSearchQuery}
@@ -512,7 +512,7 @@ export function TransactionFormModal({ visible, onClose, onSuccess, initialType 
                                                         </View>
                                                         <Text style={{ color: isSelected ? '#ffffff' : (isDark ? '#d1d5db' : '#374151') }} className="text-[10px] font-semibold text-center" numberOfLines={1}>{cat.name}</Text>
                                                         {hasAllocation && (
-                                                            <View className="w-full h-1 bg-gray-200 rounded-full mt-1.5 overflow-hidden">
+                                                            <View style={{ backgroundColor: isDark ? '#4b5563' : '#e5e7eb' }} className="w-full h-1 rounded-full mt-1.5 overflow-hidden">
                                                                 <View style={{ width: `${Math.min(cat.percent, 100)}%` }} className={cn("h-full", isFull ? "bg-red-400" : "bg-blue-400")} />
                                                             </View>
                                                         )}
@@ -526,11 +526,11 @@ export function TransactionFormModal({ visible, onClose, onSuccess, initialType 
 
                             {/* Note */}
                             <View className="mb-4">
-                                <Text style={{ color: isDark ? '#9ca3af' : '#6b7280' }} className="text-[10px] font-bold uppercase mb-2 ml-1">Note</Text>
+                                <Text style={{ color: isDark ? '#9ca3af' : '#6b7280' }} className="text-[10px] font-bold uppercase mb-2 ml-1">{t('transactionForm.note')}</Text>
                                 <TextInput
                                     className="p-3 rounded-xl border text-[13px]"
                                     style={{ backgroundColor: isDark ? '#374151' : '#ffffff', borderColor: isDark ? '#4b5563' : '#e5e7eb', color: isDark ? '#f9fafb' : '#111827', minHeight: 60 }}
-                                    placeholder="Add a note..."
+                                    placeholder={t('transactionForm.notePlaceholder')}
                                     placeholderTextColor={isDark ? '#6b7280' : '#9ca3af'}
                                     multiline
                                     numberOfLines={2}
@@ -542,10 +542,10 @@ export function TransactionFormModal({ visible, onClose, onSuccess, initialType 
 
                             {/* Save Button */}
                             <Button
-                                label="Save Transaction"
+                                label={t('transactionForm.saveTransaction')}
                                 onPress={handleSubmit}
                                 isLoading={isSubmitting}
-                                className={cn("rounded-xl", isSubmitting ? "bg-gray-300" : "bg-gray-900")}
+                                className={cn("rounded-xl", isSubmitting ? (isDark ? "bg-gray-600" : "bg-gray-300") : (isDark ? "bg-blue-600" : "bg-gray-900"))}
                             />
                         </ScrollView>
                     )}

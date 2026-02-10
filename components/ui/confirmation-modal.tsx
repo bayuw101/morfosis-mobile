@@ -3,6 +3,7 @@ import { Modal, View, Text, Pressable, Animated } from 'react-native';
 import { cn } from '../../lib/utils';
 import { AlertTriangle, X } from 'lucide-react-native';
 import { Button } from './button';
+import { useTheme } from '../../context/theme-context';
 
 interface ConfirmationModalProps {
     visible: boolean;
@@ -27,6 +28,8 @@ export function ConfirmationModal({
     variant = 'default',
     isLoading = false,
 }: ConfirmationModalProps) {
+    const { isDark } = useTheme();
+
     if (!visible) return null;
 
     return (
@@ -37,18 +40,30 @@ export function ConfirmationModal({
             onRequestClose={onClose}
         >
             <View className="flex-1 bg-black/50 items-center justify-center p-5">
-                <View className="bg-white w-full max-w-sm rounded-[24px] p-6 shadow-xl items-center">
+                <View
+                    style={{ backgroundColor: isDark ? '#1f2937' : '#ffffff' }}
+                    className="w-full max-w-sm rounded-[24px] p-6 shadow-xl items-center"
+                >
                     {variant === 'danger' && (
-                        <View className="w-12 h-12 bg-red-100 rounded-full items-center justify-center mb-4">
+                        <View
+                            style={{ backgroundColor: isDark ? '#451a1a' : '#fef2f2' }}
+                            className="w-12 h-12 rounded-full items-center justify-center mb-4"
+                        >
                             <AlertTriangle size={24} color="#ef4444" />
                         </View>
                     )}
 
-                    <Text className="text-lg font-bold text-gray-900 text-center mb-2">
+                    <Text
+                        style={{ color: isDark ? '#f9fafb' : '#111827' }}
+                        className="text-lg font-bold text-center mb-2"
+                    >
                         {title}
                     </Text>
 
-                    <Text className="text-sm text-gray-500 text-center mb-6 leading-relaxed">
+                    <Text
+                        style={{ color: isDark ? '#9ca3af' : '#6b7280' }}
+                        className="text-sm text-center mb-6 leading-relaxed"
+                    >
                         {message}
                     </Text>
 
@@ -66,7 +81,7 @@ export function ConfirmationModal({
                             variant="ghost"
                             disabled={isLoading}
                             className="w-full"
-                            textClassName="text-gray-500"
+                            textClassName={isDark ? "text-gray-400" : "text-gray-500"}
                         />
                     </View>
                 </View>

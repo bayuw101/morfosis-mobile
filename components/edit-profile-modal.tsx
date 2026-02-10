@@ -3,6 +3,8 @@ import { useState, useEffect } from "react";
 import { X, User, Check } from "lucide-react-native";
 import { API_URL } from "../constants/config";
 import { getAuthHeader } from "../lib/auth";
+import { useTheme } from "../context/theme-context";
+import { useLanguage } from "../context/language-context";
 
 // Safe import for Google Signin
 let GoogleSignin: any = { getTokens: async () => { throw new Error("Not initialized") } };
@@ -16,6 +18,8 @@ interface EditProfileModalProps {
 }
 
 export function EditProfileModal({ visible, onClose, onSuccess, currentUser }: EditProfileModalProps) {
+    const { isDark } = useTheme();
+    const { t } = useLanguage();
     const [name, setName] = useState("");
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -27,11 +31,9 @@ export function EditProfileModal({ visible, onClose, onSuccess, currentUser }: E
         }
     }, [visible, currentUser]);
 
-
-
     const handleSave = async () => {
         if (!name.trim()) {
-            setError("Name is required");
+            setError(t('editProfile.nameRequired'));
             return;
         }
 
@@ -62,15 +64,28 @@ export function EditProfileModal({ visible, onClose, onSuccess, currentUser }: E
                 onClose();
             } else {
                 const errData = await res.json();
-                setError(errData.error || "Failed to update profile");
+                setError(errData.error || t('editProfile.updateFailed'));
             }
         } catch (e) {
             console.error("Update profile error:", e);
-            setError("Network error. Please try again.");
+            setError(t('editProfile.networkError'));
         } finally {
             setIsLoading(false);
         }
     };
+
+    const sheetBg = isDark ? '#1f2937' : '#ffffff';
+    const headerBorder = isDark ? '#374151' : '#f3f4f6';
+    const titleColor = isDark ? '#f9fafb' : '#111827';
+    const labelColor = isDark ? '#9ca3af' : '#6b7280';
+    const inputBg = isDark ? '#374151' : '#f9fafb';
+    const inputBorder = isDark ? '#4b5563' : '#e5e7eb';
+    const inputText = isDark ? '#f9fafb' : '#111827';
+    const closeBtnBg = isDark ? '#374151' : '#f3f4f6';
+    const closeIconColor = isDark ? '#d1d5db' : '#64748b';
+    const disabledBg = isDark ? '#4b5563' : '#f3f4f6';
+    const disabledText = isDark ? '#9ca3af' : '#6b7280';
+    const hintColor = isDark ? '#6b7280' : '#9ca3af';
 
     return (
         <Modal visible={visible} animationType="slide" transparent>
@@ -80,13 +95,13 @@ export function EditProfileModal({ visible, onClose, onSuccess, currentUser }: E
             >
                 <Pressable className="flex-1" onPress={onClose} />
 
-                <View className="bg-white mx-4 mb-6 rounded-[24px] overflow-hidden shadow-2xl" style={{ maxHeight: '80%' }}>
+                <View style={{ backgroundColor: sheetBg, maxHeight: '80%' }} className="mx-4 mb-6 rounded-[24px] overflow-hidden shadow-2xl">
                     {/* Header */}
-                    <View className="px-5 pt-5 pb-4 border-b border-gray-100">
+                    <View style={{ borderBottomColor: headerBorder }} className="px-5 pt-5 pb-4 border-b">
                         <View className="flex-row justify-between items-center">
-                            <Text className="text-lg font-bold text-gray-900">Edit Profile</Text>
-                            <Pressable onPress={onClose} className="bg-gray-100 p-2 rounded-full">
-                                <X size={18} color="#64748b" />
+                            <Text style={{ color: titleColor }} className="text-lg font-bold">{t('editProfile.title')}</Text>
+                            <Pressable onPress={onClose} style={{ backgroundColor: closeBtnBg }} className="p-2 rounded-full">
+                                <X size={18} color={closeIconColor} />
                             </Pressable>
                         </View>
                     </View>
@@ -95,13 +110,14 @@ export function EditProfileModal({ visible, onClose, onSuccess, currentUser }: E
                     <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ padding: 20 }}>
                         {/* Name Field */}
                         <View className="mb-4">
-                            <Text className="text-gray-500 text-[10px] font-bold uppercase mb-2 ml-1">Your Name</Text>
-                            <View className="flex-row items-center bg-gray-50 rounded-xl px-4 py-3 border border-gray-200">
-                                <User size={18} color="#9ca3af" />
+                            <Text style={{ color: labelColor }} className="text-[10px] font-bold uppercase mb-2 ml-1">{t('editProfile.yourName')}</Text>
+                            <View style={{ backgroundColor: inputBg, borderColor: inputBorder }} className="flex-row items-center rounded-xl px-4 py-3 border">
+                                <User size={18} color={hintColor} />
                                 <TextInput
-                                    className="flex-1 ml-3 text-gray-900 text-[15px]"
-                                    placeholder="Enter your name"
-                                    placeholderTextColor="#9ca3af"
+                                    className="flex-1 ml-3 text-[15px]"
+                                    style={{ color: inputText }}
+                                    placeholder={t('editProfile.namePlaceholder')}
+                                    placeholderTextColor={hintColor}
                                     value={name}
                                     onChangeText={setName}
                                     autoFocus
@@ -111,17 +127,17 @@ export function EditProfileModal({ visible, onClose, onSuccess, currentUser }: E
 
                         {/* Email (Read-only) */}
                         <View className="mb-4">
-                            <Text className="text-gray-500 text-[10px] font-bold uppercase mb-2 ml-1">Email</Text>
-                            <View className="bg-gray-100 rounded-xl px-4 py-3 border border-gray-200">
-                                <Text className="text-gray-500 text-[14px]">{currentUser?.email || "-"}</Text>
+                            <Text style={{ color: labelColor }} className="text-[10px] font-bold uppercase mb-2 ml-1">{t('editProfile.email')}</Text>
+                            <View style={{ backgroundColor: disabledBg, borderColor: inputBorder }} className="rounded-xl px-4 py-3 border">
+                                <Text style={{ color: disabledText }} className="text-[14px]">{currentUser?.email || "-"}</Text>
                             </View>
-                            <Text className="text-gray-400 text-[10px] mt-1 ml-1">Email cannot be changed</Text>
+                            <Text style={{ color: hintColor }} className="text-[10px] mt-1 ml-1">{t('editProfile.emailCannotBeChanged')}</Text>
                         </View>
 
                         {/* Error */}
                         {error && (
-                            <View className="bg-red-50 border border-red-200 rounded-xl p-3 mb-4">
-                                <Text className="text-red-600 text-sm">{error}</Text>
+                            <View style={{ backgroundColor: isDark ? '#451a1a' : '#fef2f2', borderColor: isDark ? '#7f1d1d' : '#fecaca' }} className="rounded-xl p-3 mb-4 border">
+                                <Text className="text-red-500 text-sm">{error}</Text>
                             </View>
                         )}
 
@@ -129,14 +145,15 @@ export function EditProfileModal({ visible, onClose, onSuccess, currentUser }: E
                         <Pressable
                             onPress={handleSave}
                             disabled={isLoading}
-                            className={`h-12 rounded-xl items-center justify-center flex-row gap-2 ${isLoading ? 'bg-gray-300' : 'bg-gray-900'}`}
+                            style={{ backgroundColor: isLoading ? (isDark ? '#4b5563' : '#d1d5db') : (isDark ? '#3b82f6' : '#111827') }}
+                            className="h-12 rounded-xl items-center justify-center flex-row gap-2"
                         >
                             {isLoading ? (
                                 <ActivityIndicator color="white" size="small" />
                             ) : (
                                 <>
                                     <Check size={18} color="white" strokeWidth={2.5} />
-                                    <Text className="text-white font-bold text-[14px]">Save Changes</Text>
+                                    <Text className="text-white font-bold text-[14px]">{t('editProfile.saveChanges')}</Text>
                                 </>
                             )}
                         </Pressable>

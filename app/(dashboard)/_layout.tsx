@@ -148,7 +148,7 @@ export default function DashboardLayout() {
     return (
         <FamilyProvider>
             <TransactionModalProvider>
-                <StatusBar style="light" />
+                <StatusBar style="light" translucent backgroundColor="transparent" />
                 <DashboardTabs />
                 <ModalContainer />
             </TransactionModalProvider>

@@ -6,13 +6,15 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { API_URL } from "../../constants/config";
 import { cn } from "../../lib/utils";
 import { getAuthHeader } from "../../lib/auth";
+import { useTheme } from "../../context/theme-context";
+import { useLanguage } from "../../context/language-context";
 
 // Account Types Configuration
 const ACCOUNT_TYPES = [
-    { type: 'bank', label: 'Bank', icon: Landmark, color: '#3b82f6', bgColor: '#dbeafe' },
-    { type: 'e-wallet', label: 'E-Wallet', icon: Wallet, color: '#8b5cf6', bgColor: '#ede9fe' },
-    { type: 'cash', label: 'Cash', icon: Banknote, color: '#22c55e', bgColor: '#dcfce7' },
-    { type: 'investment', label: 'Investment', icon: TrendingUp, color: '#f59e0b', bgColor: '#fef3c7' },
+    { type: 'bank', labelKey: 'accountTypes.bank', icon: Landmark, color: '#3b82f6', bgColor: '#dbeafe', bgColorDark: '#1e3a5f' },
+    { type: 'e-wallet', labelKey: 'accountTypes.ewallet', icon: Wallet, color: '#8b5cf6', bgColor: '#ede9fe', bgColorDark: '#312e81' },
+    { type: 'cash', labelKey: 'accountTypes.cash', icon: Banknote, color: '#22c55e', bgColor: '#dcfce7', bgColorDark: '#14532d' },
+    { type: 'investment', labelKey: 'accountTypes.investment', icon: TrendingUp, color: '#f59e0b', bgColor: '#fef3c7', bgColorDark: '#451a03' },
 ];
 
 interface Account {
@@ -37,6 +39,8 @@ interface AccountModalProps {
 }
 
 export function AccountManagementModal({ visible, onClose, onAccountsUpdated }: AccountModalProps) {
+    const { isDark } = useTheme();
+    const { t } = useLanguage();
     const [view, setView] = useState<"list" | "create" | "edit">("list");
     const [accounts, setAccounts] = useState<Account[]>([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -63,7 +67,20 @@ export function AccountManagementModal({ visible, onClose, onAccountsUpdated }: 
         onConfirm: () => Promise<void> | void;
     } | null>(null);
 
-
+    // Theme colors
+    const sheetBg = isDark ? '#1f2937' : '#ffffff';
+    const cardBg = isDark ? '#374151' : '#ffffff';
+    const cardBorder = isDark ? '#4b5563' : '#f3f4f6';
+    const titleColor = isDark ? '#f9fafb' : '#111827';
+    const labelColor = isDark ? '#9ca3af' : '#6b7280';
+    const textColor = isDark ? '#d1d5db' : '#374151';
+    const inputBg = isDark ? '#374151' : '#f9fafb';
+    const inputBorder = isDark ? '#4b5563' : '#e5e7eb';
+    const handleColor = isDark ? '#4b5563' : '#d1d5db';
+    const skeletonBg = isDark ? '#374151' : '#e5e7eb';
+    const skeletonLight = isDark ? '#4b5563' : '#f3f4f6';
+    const closeBtnBg = isDark ? '#374151' : '#f3f4f6';
+    const closeIconColor = isDark ? '#d1d5db' : '#374151';
 
     const fetchAccounts = useCallback(async () => {
         try {
@@ -75,7 +92,6 @@ export function AccountManagementModal({ visible, onClose, onAccountsUpdated }: 
 
             if (accRes.ok) {
                 const data = await accRes.json();
-                // Handle both array and { accounts: [...] } response formats
                 const accountsList = Array.isArray(data) ? data : (data.accounts || []);
                 setAccounts(accountsList.sort((a: Account, b: Account) => (a.sort_order || 0) - (b.sort_order || 0)));
             }
@@ -122,7 +138,7 @@ export function AccountManagementModal({ visible, onClose, onAccountsUpdated }: 
 
     const handleSave = async () => {
         if (!formName.trim()) {
-            Alert.alert("Error", "Please enter an account name");
+            Alert.alert(t('common.error'), t('accountManager.enterAccountName'));
             return;
         }
 
@@ -162,10 +178,10 @@ export function AccountManagementModal({ visible, onClose, onAccountsUpdated }: 
                 if (onAccountsUpdated) onAccountsUpdated();
             } else {
                 const err = await res.json();
-                Alert.alert("Error", err.error || "Failed to save account");
+                Alert.alert(t('common.error'), err.error || t('accountManager.failedSave'));
             }
         } catch (e) {
-            Alert.alert("Error", "Network error");
+            Alert.alert(t('common.error'), t('accountManager.networkError'));
         } finally {
             setIsSaving(false);
         }
@@ -187,10 +203,10 @@ export function AccountManagementModal({ visible, onClose, onAccountsUpdated }: 
                 if (onAccountsUpdated) onAccountsUpdated();
             } else {
                 const err = await res.json();
-                Alert.alert("Error", err.error || "Failed to delete account");
+                Alert.alert(t('common.error'), err.error || t('accountManager.failedDelete'));
             }
         } catch (e) {
-            Alert.alert("Error", "Network error");
+            Alert.alert(t('common.error'), t('accountManager.networkError'));
         } finally {
             setIsSaving(false);
         }
@@ -199,25 +215,22 @@ export function AccountManagementModal({ visible, onClose, onAccountsUpdated }: 
     const requestDelete = () => {
         setConfirmConfig({
             visible: true,
-            title: "Delete Account?",
-            message: "This will delete the account. Transactions will be preserved but unlinked.",
-            actionLabel: "Delete",
+            title: t('accountManager.deleteAccount'),
+            message: t('accountManager.deleteAccountMsg'),
+            actionLabel: t('common.delete'),
             isDestructive: true,
             onConfirm: executeDelete
         });
     };
 
     const handleDragEnd = async ({ data }: { data: Account[] }) => {
-        setAccounts(data); // Optimistic
+        setAccounts(data);
 
         try {
             const headers = {
                 ...(await getAuthHeader()),
                 'Content-Type': 'application/json'
             };
-            // Prepare updates: server expects { updates: [{ id, sort_order }] } or similar
-            // But based on existing code in Category Manager it was { updates }
-            // Let's match typical pattern: send item ID and new index
             const updates = data.map((acc, index) => ({
                 id: acc.id,
                 sort_order: index
@@ -232,7 +245,7 @@ export function AccountManagementModal({ visible, onClose, onAccountsUpdated }: 
             if (onAccountsUpdated) onAccountsUpdated();
         } catch (e) {
             console.error("Reorder failed:", e);
-            fetchAccounts(); // Revert
+            fetchAccounts();
         }
     };
 
@@ -252,17 +265,17 @@ export function AccountManagementModal({ visible, onClose, onAccountsUpdated }: 
 
     const renderSkeleton = () => (
         <View>
-            <View className="h-7 w-48 bg-gray-200 rounded-lg mb-6" />
-            <View className="bg-gray-100 rounded-2xl p-4 mb-6">
-                <View className="h-4 w-24 bg-gray-200 rounded mb-2" />
-                <View className="h-6 w-32 bg-gray-200 rounded" />
+            <View style={{ backgroundColor: skeletonBg }} className="h-7 w-48 rounded-lg mb-6" />
+            <View style={{ backgroundColor: skeletonLight }} className="rounded-2xl p-4 mb-6">
+                <View style={{ backgroundColor: skeletonBg }} className="h-4 w-24 rounded mb-2" />
+                <View style={{ backgroundColor: skeletonBg }} className="h-6 w-32 rounded" />
             </View>
             {[1, 2, 3].map(i => (
-                <View key={i} className="bg-gray-50 rounded-2xl p-4 mb-3 flex-row items-center">
-                    <View className="h-12 w-12 bg-gray-200 rounded-2xl mr-3" />
+                <View key={i} style={{ backgroundColor: skeletonLight }} className="rounded-2xl p-4 mb-3 flex-row items-center">
+                    <View style={{ backgroundColor: skeletonBg }} className="h-12 w-12 rounded-2xl mr-3" />
                     <View className="flex-1">
-                        <View className="h-4 w-28 bg-gray-200 rounded mb-1" />
-                        <View className="h-3 w-20 bg-gray-100 rounded" />
+                        <View style={{ backgroundColor: skeletonBg }} className="h-4 w-28 rounded mb-1" />
+                        <View style={{ backgroundColor: skeletonLight }} className="h-3 w-20 rounded" />
                     </View>
                 </View>
             ))}
@@ -272,20 +285,21 @@ export function AccountManagementModal({ visible, onClose, onAccountsUpdated }: 
     const renderListView = () => (
         <View className="flex-1">
             <View className="flex-row items-center justify-between mb-5">
-                <Text className="text-xl font-bold text-gray-900">Account Manager</Text>
+                <Text style={{ color: titleColor }} className="text-xl font-bold">{t('accountManager.title')}</Text>
                 <Pressable
                     onPress={handleNewAccount}
-                    className="bg-gray-100 p-2 rounded-full"
+                    style={{ backgroundColor: closeBtnBg }}
+                    className="p-2 rounded-full"
                 >
-                    <Plus size={20} color="#374151" />
+                    <Plus size={20} color={closeIconColor} />
                 </Pressable>
             </View>
 
             {/* Total Balance Card */}
-            <View className="bg-gray-900 rounded-2xl p-4 mb-5">
-                <Text className="text-gray-400 text-xs font-medium mb-1">Total Balance</Text>
+            <View style={{ backgroundColor: isDark ? '#111827' : '#111827' }} className="rounded-2xl p-4 mb-5">
+                <Text className="text-gray-400 text-xs font-medium mb-1">{t('accountManager.totalBalance')}</Text>
                 <Text className="text-white text-2xl font-bold">{formatCurrency(totalBalance)}</Text>
-                <Text className="text-gray-500 text-xs mt-1">{accounts.length} accounts</Text>
+                <Text className="text-gray-500 text-xs mt-1">{accounts.length} {t('accountManager.accounts')}</Text>
             </View>
 
             {/* Accounts List */}
@@ -296,7 +310,7 @@ export function AccountManagementModal({ visible, onClose, onAccountsUpdated }: 
                     keyExtractor={(item) => item.id}
                     contentContainerStyle={{ paddingBottom: 100 }}
                     renderItem={({ item, drag, isActive }) => {
-                        const typeConfig = ACCOUNT_TYPES.find(t => t.type === item.type) || ACCOUNT_TYPES[0];
+                        const typeConfig = ACCOUNT_TYPES.find(tc => tc.type === item.type) || ACCOUNT_TYPES[0];
                         const Icon = typeConfig.icon;
 
                         return (
@@ -306,10 +320,10 @@ export function AccountManagementModal({ visible, onClose, onAccountsUpdated }: 
                                 onPress={() => handleEditAccount(item)}
                                 activeOpacity={0.7}
                                 style={{
-                                    backgroundColor: 'white',
+                                    backgroundColor: isDark ? '#374151' : '#ffffff',
                                     borderRadius: 16,
                                     borderWidth: 1,
-                                    borderColor: isActive ? '#3b82f6' : '#f3f4f6',
+                                    borderColor: isActive ? '#3b82f6' : (isDark ? '#4b5563' : '#f3f4f6'),
                                     padding: 16,
                                     marginBottom: 12,
                                     flexDirection: 'row',
@@ -320,13 +334,13 @@ export function AccountManagementModal({ visible, onClose, onAccountsUpdated }: 
                             >
                                 {/* Grip Handle */}
                                 <View className="mr-3">
-                                    <GripVertical size={20} color="#9ca3af" />
+                                    <GripVertical size={20} color={isDark ? '#6b7280' : '#9ca3af'} />
                                 </View>
 
                                 {/* Logo / Icon */}
                                 <View
                                     className="h-12 w-12 rounded-2xl items-center justify-center mr-3"
-                                    style={{ backgroundColor: typeConfig.bgColor }}
+                                    style={{ backgroundColor: isDark ? typeConfig.bgColorDark : typeConfig.bgColor }}
                                 >
                                     {item.logo ? (
                                         <Image
@@ -341,14 +355,13 @@ export function AccountManagementModal({ visible, onClose, onAccountsUpdated }: 
 
                                 {/* Name & Type */}
                                 <View className="flex-1">
-                                    <Text className="font-bold text-gray-900 text-[15px]" numberOfLines={1}>{item.name}</Text>
-                                    <Text className="text-xs text-gray-500 capitalize">{item.type.replace('-', ' ')}</Text>
+                                    <Text style={{ color: titleColor }} className="font-bold text-[15px]" numberOfLines={1}>{item.name}</Text>
+                                    <Text style={{ color: labelColor }} className="text-xs capitalize">{item.type.replace('-', ' ')}</Text>
                                 </View>
 
-                                {/* Balance (Hide in reorder mode to reduce clutter, or keep it) */}
-                                <Text className="font-bold text-gray-900 text-sm">{formatCurrency(item.current_balance)}</Text>
+                                {/* Balance */}
+                                <Text style={{ color: titleColor }} className="font-bold text-sm">{formatCurrency(item.current_balance)}</Text>
                             </TouchableOpacity>
-
                         );
                     }}
                     ListFooterComponent={<View className="h-4" />}
@@ -364,14 +377,14 @@ export function AccountManagementModal({ visible, onClose, onAccountsUpdated }: 
             <View>
                 {/* Header */}
                 <View className="flex-row items-center mb-6">
-                    <Pressable onPress={() => { setView("list"); resetForm(); }} className="mr-3 bg-gray-100 p-2 rounded-full">
-                        <X size={16} color="black" />
+                    <Pressable onPress={() => { setView("list"); resetForm(); }} style={{ backgroundColor: closeBtnBg }} className="mr-3 p-2 rounded-full">
+                        <X size={16} color={closeIconColor} />
                     </Pressable>
-                    <Text className="text-xl font-bold text-gray-900 flex-1">
-                        {isEditing ? "Edit Account" : "New Account"}
+                    <Text style={{ color: titleColor }} className="text-xl font-bold flex-1">
+                        {isEditing ? t('accountManager.editAccount') : t('accountManager.newAccount')}
                     </Text>
                     {isEditing && (
-                        <Pressable onPress={requestDelete} className="bg-red-50 p-2 rounded-full">
+                        <Pressable onPress={requestDelete} style={{ backgroundColor: isDark ? '#451a1a' : '#fef2f2' }} className="p-2 rounded-full">
                             <Trash2 size={18} color="#ef4444" />
                         </Pressable>
                     )}
@@ -385,11 +398,12 @@ export function AccountManagementModal({ visible, onClose, onAccountsUpdated }: 
                 >
                     {/* Account Name */}
                     <View className="mb-5">
-                        <Text className="text-sm font-bold text-gray-700 mb-2">Account Name</Text>
+                        <Text style={{ color: textColor }} className="text-sm font-bold mb-2">{t('accountManager.accountName')}</Text>
                         <TextInput
-                            className="bg-gray-50 border border-gray-200 rounded-xl p-4 text-gray-900"
-                            placeholder="e.g. BCA Savings"
-                            placeholderTextColor="#9ca3af"
+                            style={{ backgroundColor: inputBg, borderColor: inputBorder, color: titleColor }}
+                            className="border rounded-xl p-4"
+                            placeholder={t('accountManager.accountNamePlaceholder')}
+                            placeholderTextColor={labelColor}
                             value={formName}
                             onChangeText={setFormName}
                         />
@@ -397,7 +411,7 @@ export function AccountManagementModal({ visible, onClose, onAccountsUpdated }: 
 
                     {/* Account Type */}
                     <View className="mb-5">
-                        <Text className="text-sm font-bold text-gray-700 mb-2">Account Type</Text>
+                        <Text style={{ color: textColor }} className="text-sm font-bold mb-2">{t('accountManager.accountType')}</Text>
                         <View className="flex-row flex-wrap gap-2">
                             {ACCOUNT_TYPES.map(type => {
                                 const Icon = type.icon;
@@ -406,14 +420,15 @@ export function AccountManagementModal({ visible, onClose, onAccountsUpdated }: 
                                     <Pressable
                                         key={type.type}
                                         onPress={() => setFormType(type.type)}
-                                        className={cn(
-                                            "flex-row items-center gap-2 px-4 py-3 rounded-xl border",
-                                            isSelected ? "bg-gray-900 border-gray-900" : "bg-white border-gray-200"
-                                        )}
+                                        style={isSelected
+                                            ? { backgroundColor: isDark ? '#3b82f6' : '#111827', borderColor: isDark ? '#3b82f6' : '#111827' }
+                                            : { backgroundColor: isDark ? '#374151' : '#ffffff', borderColor: isDark ? '#4b5563' : '#e5e7eb' }
+                                        }
+                                        className="flex-row items-center gap-2 px-4 py-3 rounded-xl border"
                                     >
                                         <Icon size={16} color={isSelected ? "#ffffff" : type.color} />
-                                        <Text className={cn("font-semibold text-sm", isSelected ? "text-white" : "text-gray-700")}>
-                                            {type.label}
+                                        <Text style={{ color: isSelected ? '#ffffff' : textColor }} className="font-semibold text-sm">
+                                            {t(type.labelKey)}
                                         </Text>
                                     </Pressable>
                                 );
@@ -421,21 +436,22 @@ export function AccountManagementModal({ visible, onClose, onAccountsUpdated }: 
                         </View>
                     </View>
 
-                    {/* Initial Balance */}
+                    {/* Balance */}
                     <View className="mb-5">
-                        <Text className="text-sm font-bold text-gray-700 mb-2">
-                            {isEditing ? "Current Balance" : "Initial Balance"}
+                        <Text style={{ color: textColor }} className="text-sm font-bold mb-2">
+                            {isEditing ? t('accountManager.currentBalance') : t('accountManager.initialBalance')}
                         </Text>
-                        <View className="flex-row items-center bg-gray-50 border border-gray-200 rounded-xl px-4">
-                            <Text className="text-gray-500 font-medium mr-2">Rp</Text>
+                        <View style={{ backgroundColor: inputBg, borderColor: inputBorder }} className="flex-row items-center border rounded-xl px-4">
+                            <Text style={{ color: labelColor }} className="font-medium mr-2">Rp</Text>
                             <TextInput
-                                className="flex-1 py-4 text-gray-900 text-lg font-bold"
+                                className="flex-1 py-4 text-lg font-bold"
+                                style={{ color: titleColor }}
                                 placeholder="0"
-                                placeholderTextColor="#9ca3af"
+                                placeholderTextColor={labelColor}
                                 keyboardType="numeric"
                                 value={formBalance ? new Intl.NumberFormat('id-ID').format(parseFloat(formBalance) || 0) : ""}
-                                onChangeText={(t) => {
-                                    const val = t.replace(/\D/g, "");
+                                onChangeText={(txt) => {
+                                    const val = txt.replace(/\D/g, "");
                                     setFormBalance(val);
                                 }}
                             />
@@ -444,15 +460,16 @@ export function AccountManagementModal({ visible, onClose, onAccountsUpdated }: 
 
                     {/* Logo Selection */}
                     <View className="mb-5">
-                        <Text className="text-sm font-bold text-gray-700 mb-2">Logo (Optional)</Text>
+                        <Text style={{ color: textColor }} className="text-sm font-bold mb-2">{t('accountManager.logo')}</Text>
 
                         {/* Search */}
-                        <View className="flex-row items-center bg-gray-100 rounded-xl px-4 py-2.5 mb-3">
-                            <Search size={16} color="#9ca3af" />
+                        <View style={{ backgroundColor: isDark ? '#4b5563' : '#f3f4f6' }} className="flex-row items-center rounded-xl px-4 py-2.5 mb-3">
+                            <Search size={16} color={isDark ? '#9ca3af' : '#9ca3af'} />
                             <TextInput
-                                className="flex-1 ml-2 text-gray-900 text-sm"
-                                placeholder="Search logos..."
-                                placeholderTextColor="#9ca3af"
+                                className="flex-1 ml-2 text-sm"
+                                style={{ color: titleColor }}
+                                placeholder={t('accountManager.searchLogos')}
+                                placeholderTextColor={labelColor}
                                 value={logoSearch}
                                 onChangeText={setLogoSearch}
                             />
@@ -464,22 +481,24 @@ export function AccountManagementModal({ visible, onClose, onAccountsUpdated }: 
                                 {/* No Logo Option */}
                                 <Pressable
                                     onPress={() => setFormLogo(null)}
-                                    className={cn(
-                                        "h-14 w-14 rounded-xl items-center justify-center border-2",
-                                        formLogo === null ? "border-blue-500 bg-blue-50" : "border-gray-200 bg-gray-50"
-                                    )}
+                                    style={{
+                                        borderColor: formLogo === null ? '#3b82f6' : (isDark ? '#4b5563' : '#e5e7eb'),
+                                        backgroundColor: formLogo === null ? (isDark ? '#1e3a5f' : '#eff6ff') : (isDark ? '#374151' : '#f9fafb')
+                                    }}
+                                    className="h-14 w-14 rounded-xl items-center justify-center border-2"
                                 >
-                                    <X size={18} color={formLogo === null ? "#2563eb" : "#9ca3af"} />
+                                    <X size={18} color={formLogo === null ? "#2563eb" : (isDark ? '#6b7280' : '#9ca3af')} />
                                 </Pressable>
 
                                 {filteredLogos.slice(0, 20).map(logo => (
                                     <Pressable
                                         key={logo.value}
                                         onPress={() => setFormLogo(logo.filename)}
-                                        className={cn(
-                                            "h-14 w-14 rounded-xl items-center justify-center border-2 bg-white",
-                                            formLogo === logo.filename ? "border-blue-500" : "border-gray-200"
-                                        )}
+                                        style={{
+                                            borderColor: formLogo === logo.filename ? '#3b82f6' : (isDark ? '#4b5563' : '#e5e7eb'),
+                                            backgroundColor: isDark ? '#374151' : '#ffffff'
+                                        }}
+                                        className="h-14 w-14 rounded-xl items-center justify-center border-2"
                                     >
                                         <Image
                                             source={{ uri: `${BASE_URL}/bank-logo/${logo.filename}` }}
@@ -497,16 +516,18 @@ export function AccountManagementModal({ visible, onClose, onAccountsUpdated }: 
                 <Pressable
                     onPress={handleSave}
                     disabled={isSaving || !formName.trim()}
-                    className={cn(
-                        "w-full h-14 rounded-2xl items-center justify-center mt-4",
-                        isSaving || !formName.trim() ? "bg-gray-300" : "bg-gray-900"
-                    )}
+                    style={{
+                        backgroundColor: (isSaving || !formName.trim())
+                            ? (isDark ? '#4b5563' : '#d1d5db')
+                            : (isDark ? '#3b82f6' : '#111827')
+                    }}
+                    className="w-full h-14 rounded-2xl items-center justify-center mt-4"
                 >
                     {isSaving ? (
                         <ActivityIndicator color="white" />
                     ) : (
                         <Text className="text-white font-bold text-[16px]">
-                            {isEditing ? "Save Changes" : "Create Account"}
+                            {isEditing ? t('accountManager.saveChanges') : t('accountManager.createAccount')}
                         </Text>
                     )}
                 </Pressable>
@@ -523,9 +544,9 @@ export function AccountManagementModal({ visible, onClose, onAccountsUpdated }: 
                         className="flex-1 justify-end bg-black/40"
                     >
                         <Pressable className="flex-1" onPress={onClose} />
-                        <View className="bg-white rounded-t-[32px] p-6 pb-10 h-[80%]">
+                        <View style={{ backgroundColor: sheetBg }} className="rounded-t-[32px] p-6 pb-10 h-[80%]">
                             {/* iOS-style handle */}
-                            <View className="w-10 h-1 bg-gray-300 rounded-full self-center mb-6" />
+                            <View style={{ backgroundColor: handleColor }} className="w-10 h-1 rounded-full self-center mb-6" />
 
                             {isLoading ? renderSkeleton() : (
                                 <>
@@ -536,10 +557,10 @@ export function AccountManagementModal({ visible, onClose, onAccountsUpdated }: 
 
                             {/* Loading Overlay */}
                             {isSaving && (
-                                <View className="absolute inset-0 bg-white/80 items-center justify-center z-50 rounded-t-[32px]">
-                                    <View className="bg-white p-6 rounded-2xl shadow-lg items-center">
+                                <View style={{ backgroundColor: isDark ? 'rgba(17,24,39,0.8)' : 'rgba(255,255,255,0.8)' }} className="absolute inset-0 items-center justify-center z-50 rounded-t-[32px]">
+                                    <View style={{ backgroundColor: sheetBg }} className="p-6 rounded-2xl shadow-lg items-center">
                                         <ActivityIndicator size="large" color="#2563eb" />
-                                        <Text className="text-sm font-medium text-gray-600 mt-3">Please wait...</Text>
+                                        <Text style={{ color: labelColor }} className="text-sm font-medium mt-3">{t('accountManager.pleaseWait')}</Text>
                                     </View>
                                 </View>
                             )}
@@ -552,15 +573,16 @@ export function AccountManagementModal({ visible, onClose, onAccountsUpdated }: 
             {confirmConfig && (
                 <Modal visible={!!confirmConfig} transparent animationType="fade">
                     <View className="flex-1 bg-black/50 items-center justify-center p-6">
-                        <View className="bg-white p-6 rounded-3xl w-full shadow-xl">
-                            <Text className="text-lg font-bold text-gray-900 mb-2">{confirmConfig.title}</Text>
-                            <Text className="text-gray-500 mb-6">{confirmConfig.message}</Text>
+                        <View style={{ backgroundColor: sheetBg }} className="p-6 rounded-3xl w-full shadow-xl">
+                            <Text style={{ color: titleColor }} className="text-lg font-bold mb-2">{confirmConfig.title}</Text>
+                            <Text style={{ color: labelColor }} className="mb-6">{confirmConfig.message}</Text>
                             <View className="flex-row gap-3">
                                 <Pressable
-                                    className="flex-1 bg-gray-100 p-3 rounded-xl items-center"
+                                    style={{ backgroundColor: closeBtnBg }}
+                                    className="flex-1 p-3 rounded-xl items-center"
                                     onPress={() => setConfirmConfig(null)}
                                 >
-                                    <Text className="font-bold text-gray-700">Cancel</Text>
+                                    <Text style={{ color: textColor }} className="font-bold">{t('common.cancel')}</Text>
                                 </Pressable>
                                 <Pressable
                                     className={cn("flex-1 p-3 rounded-xl items-center", confirmConfig.isDestructive ? "bg-red-600" : "bg-blue-600")}
