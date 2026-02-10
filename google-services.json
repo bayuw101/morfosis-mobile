@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "789108762087",
+    "project_id": "morfosis-id",
+    "storage_bucket": "morfosis-id.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:789108762087:android:2f52afc1d3bb99b6a90942",
+        "android_client_info": {
+          "package_name": "com.morfosis.mobile"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "789108762087-3tcsqlv2pbor7i0ab489lft5sugn6e93.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.morfosis.mobile",
+            "certificate_hash": "5e8f16062ea3cd2c4a0d547876baa6f38cabf625"
+          }
+        },
+        {
+          "client_id": "789108762087-tn2pm7614ihn18bc1fh1enjq3si162bn.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCY8i5XjqoqFvHRmOn3vsMmXg7mCldxl9s"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "789108762087-tn2pm7614ihn18bc1fh1enjq3si162bn.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
