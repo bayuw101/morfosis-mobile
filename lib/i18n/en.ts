@@ -23,6 +23,9 @@ export const en = {
         reset: "Reset",
         viewAll: "View All",
         manage: "Manage",
+        created: "Created successfully",
+        updated: "Updated successfully",
+        deleted: "Deleted successfully",
     },
 
     // Greetings

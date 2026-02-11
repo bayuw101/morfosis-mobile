@@ -130,11 +130,12 @@ function DashboardTabs() {
 }
 
 function ModalContainer() {
-    const { isOpen, initialType, closeModal, triggerRefresh } = useTransactionModal();
+    const { isOpen, initialType, initialAccountId, closeModal, triggerRefresh } = useTransactionModal();
     return (
         <TransactionFormModal
             visible={isOpen}
             initialType={initialType}
+            initialAccountId={initialAccountId}
             onClose={closeModal}
             onSuccess={() => {
                 closeModal();

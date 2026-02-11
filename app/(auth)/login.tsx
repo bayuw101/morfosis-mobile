@@ -11,6 +11,7 @@ import GoogleIcon from "../../assets/google-icon.svg";
 import { getAuthHeader } from "../../lib/auth";
 import { getAuth, GoogleAuthProvider, signInWithCredential, signInWithEmailAndPassword, getIdToken } from "@react-native-firebase/auth";
 import { GoogleSignin, statusCodes } from "../../lib/google-auth";
+import { registerPushToken } from "../../lib/notifications";
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -35,10 +36,29 @@ export default function LoginScreen() {
     ]).start();
   }, []);
 
-  // MOCK invite details (Should eventually fetch real details)
-  const [inviteDetails, setInviteDetails] = useState<{ family_name: string, inviter_name?: string } | null>(
-    inviteToken ? { family_name: "Smith Family", inviter_name: "John Smith" } : null
-  );
+  // Fetch real invite details from public preview endpoint
+  const [inviteDetails, setInviteDetails] = useState<{ family_name: string, inviter_name?: string } | null>(null);
+
+  useEffect(() => {
+    if (!inviteToken) return;
+    const fetchInviteDetails = async () => {
+      try {
+        const res = await fetch(`${API_URL}/mobile/invitations/preview?token=${inviteToken}`);
+        if (res.ok) {
+          const data = await res.json();
+          setInviteDetails(data);
+        } else {
+          // Fallback if endpoint fails (e.g. not deployed yet)
+          setInviteDetails({ family_name: "Family", inviter_name: "Someone" });
+        }
+      } catch (e) {
+        console.error("Failed to fetch invite details:", e);
+        // Fallback on error
+        setInviteDetails({ family_name: "Family", inviter_name: "Someone" });
+      }
+    };
+    fetchInviteDetails();
+  }, [inviteToken]);
 
   /* Google Sign In Configuration */
   useEffect(() => {
@@ -109,6 +129,9 @@ export default function LoginScreen() {
             console.error("Failed to process invitation:", e);
           }
         }
+
+        // Register push token
+        registerPushToken();
 
         router.replace("/(dashboard)");
       } catch (backendError) {
@@ -187,6 +210,9 @@ export default function LoginScreen() {
             console.error("Failed to process invitation:", e);
           }
         }
+
+        // Register push token
+        registerPushToken();
 
         setTimeout(() => {
           router.replace("/(dashboard)");

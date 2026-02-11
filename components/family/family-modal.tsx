@@ -1,4 +1,4 @@
-import { View, Text, Modal, Pressable, ScrollView, TextInput, ActivityIndicator, Switch, Share, Linking, Alert } from "react-native";
+import { View, Text, Modal, Pressable, ScrollView, TextInput, ActivityIndicator, Switch, Share, Linking, TouchableOpacity } from "react-native";
 import { useState, useEffect } from "react";
 import { X, UserPlus, Users, Check, Share2, Copy, Mail, MessageCircle } from "lucide-react-native";
 import { API_URL, WEB_URL } from "../../constants/config";
@@ -8,6 +8,8 @@ import { getAuthHeader } from "../../lib/auth";
 import { useFamily } from "../../context/family-context";
 import { useTheme } from "../../context/theme-context";
 import { useLanguage } from "../../context/language-context";
+import { useToast } from "../ui/toast";
+import { ConfirmationModal } from "../ui/confirmation-modal";
 
 interface FamilyMember {
     id: string;
@@ -49,18 +51,17 @@ export function FamilyManagementModal({ visible, onClose, currentUserId, onFamil
     const [invitations, setInvitations] = useState<Invitation[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [switching, setSwitching] = useState(false);
+    const { show } = useToast();
+    const [isDeleteModalVisible, setIsDeleteModalVisible] = useState(false);
+    const [isRemoveMemberModalVisible, setIsRemoveMemberModalVisible] = useState(false);
+    const [isUpdateRoleModalVisible, setIsUpdateRoleModalVisible] = useState(false);
+    const [targetMemberId, setTargetMemberId] = useState<string | null>(null);
+    const [targetRole, setTargetRole] = useState<'admin' | 'member' | null>(null);
 
     const [newFamilyName, setNewFamilyName] = useState("");
     const [inviteEmail, setInviteEmail] = useState("");
 
-    const [confirmConfig, setConfirmConfig] = useState<{
-        visible: boolean;
-        title: string;
-        message: string;
-        actionLabel: string;
-        isDestructive?: boolean;
-        onConfirm: () => Promise<void> | void;
-    } | null>(null);
+
 
     // Theme colors
     const sheetBg = isDark ? '#1f2937' : '#ffffff';
@@ -112,10 +113,10 @@ export function FamilyManagementModal({ visible, onClose, currentUserId, onFamil
                 setNewFamilyName("");
                 if (onFamilyUpdated) onFamilyUpdated();
             } else {
-                alert(t('family.failedCreate'));
+                show(t('family.failedCreate'), 'error');
             }
         } catch (e) {
-            alert(t('family.failedCreate'));
+            show(t('family.failedCreate'), 'error');
         } finally {
             setSwitching(false);
         }
@@ -147,24 +148,18 @@ export function FamilyManagementModal({ visible, onClose, currentUserId, onFamil
                 if (onFamilyUpdated) onFamilyUpdated();
             } else {
                 const d = await res.json();
-                alert(d.error || t('family.failedDelete'));
+                show(d.error || t('family.failedDelete'), 'error');
             }
         } catch (e) {
-            alert(t('family.failedDelete'));
+            show(t('family.failedDelete'), 'error');
         } finally {
             setSwitching(false);
+            setIsDeleteModalVisible(false);
         }
     };
 
     const requestDeleteFamily = () => {
-        setConfirmConfig({
-            visible: true,
-            title: t('family.deleteFamilyConfirm'),
-            message: t('family.deleteFamilyMsg'),
-            actionLabel: t('common.delete'),
-            isDestructive: true,
-            onConfirm: executeDeleteFamily
-        });
+        setIsDeleteModalVisible(true);
     };
 
     const executeRemoveMember = async (userId: string) => {
@@ -179,25 +174,22 @@ export function FamilyManagementModal({ visible, onClose, currentUserId, onFamil
             });
             if (res.ok) {
                 await refreshFamilies();
+                show(t('family.memberRemoved') || 'Member removed', 'success');
             } else {
-                alert(t('family.failedRemove'));
+                show(t('family.failedRemove'), 'error');
             }
         } catch (e) {
-            alert(t('family.failedRemove'));
+            show(t('family.failedRemove'), 'error');
         } finally {
             setSwitching(false);
+            setIsRemoveMemberModalVisible(false);
+            setTargetMemberId(null);
         }
     };
 
     const requestRemoveMember = (userId: string) => {
-        setConfirmConfig({
-            visible: true,
-            title: t('family.removeMemberConfirm'),
-            message: t('family.removeMemberMsg'),
-            actionLabel: t('family.removeMember'),
-            isDestructive: true,
-            onConfirm: () => executeRemoveMember(userId)
-        });
+        setTargetMemberId(userId);
+        setIsRemoveMemberModalVisible(true);
     };
 
     const executeUpdateRole = async (userId: string, role: 'admin' | 'member') => {
@@ -212,13 +204,17 @@ export function FamilyManagementModal({ visible, onClose, currentUserId, onFamil
             });
             if (res.ok) {
                 await refreshFamilies();
+                show(t('family.roleUpdated') || 'Role updated', 'success');
             } else {
-                alert(t('family.failedUpdateRole'));
+                show(t('family.failedUpdateRole'), 'error');
             }
         } catch (e) {
-            alert(t('family.failedUpdateRole'));
+            show(t('family.failedUpdateRole'), 'error');
         } finally {
             setSwitching(false);
+            setIsUpdateRoleModalVisible(false);
+            setTargetMemberId(null);
+            setTargetRole(null);
         }
     };
 
@@ -235,11 +231,11 @@ export function FamilyManagementModal({ visible, onClose, currentUserId, onFamil
             if (res.ok) {
                 return data.token;
             } else {
-                alert(data.error || t('family.failedInvite'));
+                show(data.error || t('family.failedInvite'), 'error');
                 return null;
             }
         } catch (e) {
-            alert(t('family.failedInvite'));
+            show(t('family.failedInvite'), 'error');
             return null;
         }
     };
@@ -250,7 +246,7 @@ export function FamilyManagementModal({ visible, onClose, currentUserId, onFamil
         const token = await createInvitation(inviteEmail);
         setSwitching(false);
         if (token) {
-            alert(t('family.inviteSent'));
+            show(t('family.inviteSent'), 'success');
             setView("list");
             setInviteEmail("");
         }
@@ -271,9 +267,9 @@ export function FamilyManagementModal({ visible, onClose, currentUserId, onFamil
             try {
                 const Clipboard = require('expo-clipboard');
                 await Clipboard.setStringAsync(link);
-                alert(t('family.linkCopied'));
+                show(t('family.linkCopied'), 'success');
             } catch (e) {
-                alert("Clipboard feature requires app rebuild. Please rebuild your dev client.");
+                show("Clipboard feature requires app rebuild. Please rebuild your dev client.", 'error');
             }
         } else if (type === 'share') {
             Share.share({
@@ -298,24 +294,19 @@ export function FamilyManagementModal({ visible, onClose, currentUserId, onFamil
                 await fetchInvitations();
                 if (onFamilyUpdated) onFamilyUpdated();
             } else {
-                alert(t('family.failedRespond'));
+                show(t('family.failedRespond'), 'error');
             }
         } catch (e) {
-            alert(t('family.failedRespond'));
+            show(t('family.failedRespond'), 'error');
         } finally {
             setSwitching(false);
         }
     };
 
     const requestUpdateRole = (userId: string, role: 'admin' | 'member') => {
-        setConfirmConfig({
-            visible: true,
-            title: role === 'admin' ? t('family.makeAdminConfirm') : t('family.revokeAdminConfirm'),
-            message: role === 'admin' ? t('family.makeAdminMsg') : t('family.revokeAdminMsg'),
-            actionLabel: role === 'admin' ? t('common.confirm') : t('family.revokeAdmin'),
-            isDestructive: false,
-            onConfirm: () => executeUpdateRole(userId, role)
-        });
+        setTargetMemberId(userId);
+        setTargetRole(role);
+        setIsUpdateRoleModalVisible(true);
     };
 
     // Loading Skeleton
@@ -352,142 +343,153 @@ export function FamilyManagementModal({ visible, onClose, currentUserId, onFamil
         </View>
     );
 
-    const renderListView = () => (
-        <View>
-            <Text style={{ color: titleColor }} className="text-xl font-bold mb-6">{t('family.title')}</Text>
+    const renderListView = () => {
+        const currentMember = families.find(f => f.id === activeFamily?.id)?.members.find(m => m.id === currentUserId);
+        const isAdmin = currentMember?.role === 'owner' || currentMember?.role === 'admin';
+        const isOwner = currentMember?.role === 'owner';
 
-            <Text style={{ color: labelColor }} className="text-xs font-bold uppercase mb-3 ml-1">{t('family.activeFamily')}</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 12, paddingBottom: 24 }}>
-                {families.map(fam => (
-                    <Pressable
-                        key={fam.id}
-                        onPress={() => handleSwitchFamily(fam.id)}
-                    >
-                        <View style={[
-                            { width: 140, height: 130, padding: 16, borderRadius: 20, borderWidth: 1, alignItems: 'center', justifyContent: 'center', gap: 10 },
-                            activeFamily?.id === fam.id
-                                ? { backgroundColor: isDark ? '#1e3a5f' : '#eff6ff', borderColor: '#3b82f6' }
-                                : { backgroundColor: isDark ? '#374151' : '#ffffff', borderColor: isDark ? '#4b5563' : '#f3f4f6' }
-                        ]}>
-                            <View style={{ backgroundColor: activeFamily?.id === fam.id ? (isDark ? '#1e40af' : '#dbeafe') : (isDark ? '#4b5563' : '#f3f4f6') }} className="h-12 w-12 rounded-full items-center justify-center">
-                                <Users size={24} color={activeFamily?.id === fam.id ? "#60a5fa" : (isDark ? '#9ca3af' : '#64748b')} />
-                            </View>
-                            <Text
-                                style={{ color: activeFamily?.id === fam.id ? '#60a5fa' : textColor }}
-                                className="font-bold text-sm text-center"
-                                numberOfLines={2}
-                            >
-                                {fam.name}
-                            </Text>
-                            {activeFamily?.id === fam.id && (
-                                <View className="bg-blue-500 rounded-full p-1 absolute top-3 right-3">
-                                    <Check size={10} color="white" strokeWidth={3} />
+        return (
+            <View>
+                <Text style={{ color: titleColor }} className="text-xl font-bold mb-6">{t('family.title')}</Text>
+
+                <Text style={{ color: labelColor }} className="text-xs font-bold uppercase mb-3 ml-1">{t('family.activeFamily')}</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 12, paddingBottom: 24 }}>
+                    {families.map(fam => (
+                        <Pressable
+                            key={fam.id}
+                            onPress={() => handleSwitchFamily(fam.id)}
+                        >
+                            <View style={[
+                                { width: 140, height: 130, padding: 16, borderRadius: 20, borderWidth: 1, alignItems: 'center', justifyContent: 'center', gap: 10 },
+                                activeFamily?.id === fam.id
+                                    ? { backgroundColor: isDark ? '#1e3a5f' : '#eff6ff', borderColor: '#3b82f6' }
+                                    : { backgroundColor: isDark ? '#374151' : '#ffffff', borderColor: isDark ? '#4b5563' : '#f3f4f6' }
+                            ]}>
+                                <View style={{ backgroundColor: activeFamily?.id === fam.id ? (isDark ? '#1e40af' : '#dbeafe') : (isDark ? '#4b5563' : '#f3f4f6') }} className="h-12 w-12 rounded-full items-center justify-center">
+                                    <Users size={24} color={activeFamily?.id === fam.id ? "#60a5fa" : (isDark ? '#9ca3af' : '#64748b')} />
                                 </View>
-                            )}
+                                <Text
+                                    style={{ color: activeFamily?.id === fam.id ? '#60a5fa' : textColor }}
+                                    className="font-bold text-sm text-center"
+                                    numberOfLines={2}
+                                >
+                                    {fam.name}
+                                </Text>
+                                {activeFamily?.id === fam.id && (
+                                    <View className="bg-blue-500 rounded-full p-1 absolute top-3 right-3">
+                                        <Check size={10} color="white" strokeWidth={3} />
+                                    </View>
+                                )}
+                            </View>
+                        </Pressable>
+                    ))}
+
+                    <Pressable onPress={() => setView("create")}>
+                        <View style={{ borderColor: isDark ? '#4b5563' : '#d1d5db', backgroundColor: isDark ? '#374151' : '#f9fafb' }} className="w-[140px] h-[130px] border border-dashed rounded-[20px] items-center justify-center gap-2">
+                            <View style={{ backgroundColor: isDark ? '#4b5563' : '#ffffff', borderColor: isDark ? '#6b7280' : '#e5e7eb' }} className="h-10 w-10 rounded-full border items-center justify-center">
+                                <UserPlus size={20} color={isDark ? '#9ca3af' : '#64748b'} />
+                            </View>
+                            <Text style={{ color: labelColor }} className="font-bold text-sm">{t('family.newFamily')}</Text>
                         </View>
                     </Pressable>
-                ))}
+                </ScrollView>
 
-                <Pressable onPress={() => setView("create")}>
-                    <View style={{ borderColor: isDark ? '#4b5563' : '#d1d5db', backgroundColor: isDark ? '#374151' : '#f9fafb' }} className="w-[140px] h-[130px] border border-dashed rounded-[20px] items-center justify-center gap-2">
-                        <View style={{ backgroundColor: isDark ? '#4b5563' : '#ffffff', borderColor: isDark ? '#6b7280' : '#e5e7eb' }} className="h-10 w-10 rounded-full border items-center justify-center">
-                            <UserPlus size={20} color={isDark ? '#9ca3af' : '#64748b'} />
+                {invitations.length > 0 && (
+                    <View className="mb-6">
+                        <Text style={{ color: labelColor }} className="text-xs font-bold uppercase ml-1 mb-3">{t('family.pendingInvitations')}</Text>
+                        <View className="gap-3">
+                            {invitations.map(inv => (
+                                <View key={inv.id} style={{ backgroundColor: isDark ? '#1e3a5f' : '#eff6ff', borderColor: isDark ? '#1e40af' : '#bfdbfe' }} className="border p-4 rounded-2xl flex-row items-center justify-between">
+                                    <View className="flex-1">
+                                        <Text style={{ color: isDark ? '#93c5fd' : '#1e3a8a' }} className="font-bold text-[15px]">{inv.family_name}</Text>
+                                        <Text style={{ color: isDark ? '#60a5fa' : '#2563eb' }} className="text-xs">{t('family.invitedBy')} {inv.inviter_name}</Text>
+                                    </View>
+                                    <View className="flex-row gap-2">
+                                        <Pressable
+                                            onPress={() => handleRespondInvitation(inv.id, 'decline')}
+                                            style={{ backgroundColor: isDark ? '#374151' : '#ffffff', borderColor: isDark ? '#4b5563' : '#bfdbfe' }}
+                                            className="p-2 rounded-full border"
+                                        >
+                                            <X size={16} color="#ef4444" />
+                                        </Pressable>
+                                        <Pressable
+                                            onPress={() => handleRespondInvitation(inv.id, 'accept')}
+                                            className="bg-blue-600 p-2 rounded-full shadow-lg shadow-blue-600/20"
+                                        >
+                                            <Check size={16} color="white" />
+                                        </Pressable>
+                                    </View>
+                                </View>
+                            ))}
                         </View>
-                        <Text style={{ color: labelColor }} className="font-bold text-sm">{t('family.newFamily')}</Text>
                     </View>
-                </Pressable>
-            </ScrollView>
+                )}
 
-            {invitations.length > 0 && (
-                <View className="mb-6">
-                    <Text style={{ color: labelColor }} className="text-xs font-bold uppercase ml-1 mb-3">{t('family.pendingInvitations')}</Text>
-                    <View className="gap-3">
-                        {invitations.map(inv => (
-                            <View key={inv.id} style={{ backgroundColor: isDark ? '#1e3a5f' : '#eff6ff', borderColor: isDark ? '#1e40af' : '#bfdbfe' }} className="border p-4 rounded-2xl flex-row items-center justify-between">
-                                <View className="flex-1">
-                                    <Text style={{ color: isDark ? '#93c5fd' : '#1e3a8a' }} className="font-bold text-[15px]">{inv.family_name}</Text>
-                                    <Text style={{ color: isDark ? '#60a5fa' : '#2563eb' }} className="text-xs">{t('family.invitedBy')} {inv.inviter_name}</Text>
-                                </View>
-                                <View className="flex-row gap-2">
-                                    <Pressable
-                                        onPress={() => handleRespondInvitation(inv.id, 'decline')}
-                                        style={{ backgroundColor: isDark ? '#374151' : '#ffffff', borderColor: isDark ? '#4b5563' : '#bfdbfe' }}
-                                        className="p-2 rounded-full border"
-                                    >
-                                        <X size={16} color="#ef4444" />
-                                    </Pressable>
-                                    <Pressable
-                                        onPress={() => handleRespondInvitation(inv.id, 'accept')}
-                                        className="bg-blue-600 p-2 rounded-full shadow-lg shadow-blue-600/20"
-                                    >
-                                        <Check size={16} color="white" />
-                                    </Pressable>
-                                </View>
-                            </View>
-                        ))}
-                    </View>
-                </View>
-            )}
-
-            {activeFamily && (
-                <View>
-                    <View className="flex-row items-center justify-between mb-4">
-                        <Text style={{ color: labelColor }} className="text-xs font-bold uppercase ml-1">{t('family.members')}</Text>
-                        <View className="flex-row items-center gap-3">
-                            {families.find(f => f.id === activeFamily.id)?.members.find(m => m.id === currentUserId)?.role === 'owner' && (
+                {activeFamily && (
+                    <View>
+                        <View className="flex-row items-center justify-between mb-4">
+                            <Text style={{ color: labelColor }} className="text-xs font-bold uppercase ml-1">{t('family.members')}</Text>
+                            {isOwner && (
                                 <Pressable onPress={requestDeleteFamily} style={{ backgroundColor: isDark ? '#451a1a' : '#fef2f2' }} className="px-3 py-1.5 rounded-full">
                                     <Text className="text-xs font-bold text-red-500">{t('family.deleteFamily')}</Text>
                                 </Pressable>
                             )}
-                            <Pressable onPress={() => setView("invite")}>
-                                <Text className="text-blue-500 text-xs font-bold">{t('family.inviteMember')}</Text>
-                            </Pressable>
                         </View>
-                    </View>
 
-                    <View style={{ backgroundColor: cardBg, borderColor: cardBorder }} className="border rounded-2xl overflow-hidden">
-                        {families.find(f => f.id === activeFamily.id)?.members.map((member, i) => {
-                            const isAdmin = families.find(f => f.id === activeFamily.id)?.members.find(m => m.id === currentUserId)?.role === 'admin' || families.find(f => f.id === activeFamily.id)?.members.find(m => m.id === currentUserId)?.role === 'owner';
-                            return (
-                                <View key={member.id} style={i !== 0 ? { borderTopWidth: 1, borderTopColor: isDark ? '#374151' : '#f9fafb' } : {}} className="p-4 flex-row items-center justify-between">
-                                    <View className="flex-row items-center gap-3 flex-1">
-                                        <View style={{ backgroundColor: isDark ? '#312e81' : '#eef2ff' }} className="h-10 w-10 rounded-full items-center justify-center">
-                                            <Text style={{ color: isDark ? '#a5b4fc' : '#4f46e5' }} className="font-bold uppercase">{(member.name || "?").charAt(0)}</Text>
-                                        </View>
-                                        <View>
-                                            <Text style={{ color: titleColor }} className="font-bold text-[15px]">{member.name} {member.id === currentUserId && `(${t('family.you')})`}</Text>
-                                            <Text style={{ color: labelColor }} className="text-xs capitalize">{member.role} • {member.status}</Text>
-                                        </View>
-                                    </View>
-
-                                    {
-                                        isAdmin && member.id !== currentUserId && member.role !== 'owner' && (
-                                            <View className="flex-row items-center gap-2">
-                                                <Pressable
-                                                    onPress={() => requestUpdateRole(member.id, member.role === 'admin' ? 'member' : 'admin')}
-                                                    style={{ backgroundColor: member.role === 'admin' ? (isDark ? '#451a1a' : '#fef2f2') : (isDark ? '#374151' : '#f3f4f6') }}
-                                                    className="px-2 py-1 rounded-md"
-                                                >
-                                                    <Text style={{ color: member.role === 'admin' ? '#ef4444' : labelColor }} className="text-[10px] font-bold">
-                                                        {member.role === 'admin' ? t('family.revokeAdmin') : t('family.makeAdmin')}
-                                                    </Text>
-                                                </Pressable>
-
-                                                <Pressable onPress={() => requestRemoveMember(member.id)} style={{ backgroundColor: isDark ? '#451a1a' : '#fef2f2' }} className="p-2 rounded-full">
-                                                    <X size={14} color="#ef4444" />
-                                                </Pressable>
+                        <View style={{ backgroundColor: cardBg, borderColor: cardBorder }} className="border rounded-2xl overflow-hidden">
+                            {families.find(f => f.id === activeFamily.id)?.members.map((member, i) => {
+                                return (
+                                    <View key={member.id} style={i !== 0 ? { borderTopWidth: 1, borderTopColor: isDark ? '#374151' : '#f9fafb' } : {}} className="p-4 flex-row items-center justify-between">
+                                        <View className="flex-row items-center gap-3 flex-1">
+                                            <View style={{ backgroundColor: isDark ? '#312e81' : '#eef2ff' }} className="h-10 w-10 rounded-full items-center justify-center">
+                                                <Text style={{ color: isDark ? '#a5b4fc' : '#4f46e5' }} className="font-bold uppercase">{(member.name || "?").charAt(0)}</Text>
                                             </View>
-                                        )
-                                    }
+                                            <View>
+                                                <Text style={{ color: titleColor }} className="font-bold text-[15px]">{member.name} {member.id === currentUserId && `(${t('family.you')})`}</Text>
+                                                <Text style={{ color: labelColor }} className="text-xs capitalize">{member.role} • {member.status}</Text>
+                                            </View>
+                                        </View>
+
+                                        {
+                                            isAdmin && member.id !== currentUserId && member.role !== 'owner' && (
+                                                <View className="flex-row items-center gap-2">
+                                                    <Pressable
+                                                        onPress={() => requestUpdateRole(member.id, member.role === 'admin' ? 'member' : 'admin')}
+                                                        style={{ backgroundColor: member.role === 'admin' ? (isDark ? '#451a1a' : '#fef2f2') : (isDark ? '#374151' : '#f3f4f6') }}
+                                                        className="px-2 py-1 rounded-md"
+                                                    >
+                                                        <Text style={{ color: member.role === 'admin' ? '#ef4444' : labelColor }} className="text-[10px] font-bold">
+                                                            {member.role === 'admin' ? t('family.revokeAdmin') : t('family.makeAdmin')}
+                                                        </Text>
+                                                    </Pressable>
+
+                                                    <Pressable onPress={() => requestRemoveMember(member.id)} style={{ backgroundColor: isDark ? '#451a1a' : '#fef2f2' }} className="p-2 rounded-full">
+                                                        <X size={14} color="#ef4444" />
+                                                    </Pressable>
+                                                </View>
+                                            )
+                                        }
+                                    </View>
+                                );
+                            })}
+                        </View>
+
+                        {/* Invite Member - Dashed Button */}
+                        {isAdmin && (
+                            <TouchableOpacity onPress={() => setView("invite")} className="mt-4 active:opacity-70">
+                                <View style={{ borderColor: isDark ? '#4b5563' : '#d1d5db', backgroundColor: isDark ? '#374151' : '#f9fafb' }} className="border border-dashed rounded-2xl py-4 items-center justify-center flex-row gap-2">
+                                    <View style={{ backgroundColor: isDark ? '#4b5563' : '#ffffff', borderColor: isDark ? '#6b7280' : '#e5e7eb' }} className="h-8 w-8 rounded-full border items-center justify-center">
+                                        <UserPlus size={16} color={isDark ? '#9ca3af' : '#64748b'} />
+                                    </View>
+                                    <Text style={{ color: labelColor }} className="font-bold text-sm">{t('family.inviteMember')}</Text>
                                 </View>
-                            );
-                        })}
+                            </TouchableOpacity>
+                        )}
                     </View>
-                </View>
-            )
-            }
-        </View >
-    );
+                )}
+            </View >
+        );
+    };
 
     const renderCreateView = () => (
         <View>
@@ -591,11 +593,11 @@ export function FamilyManagementModal({ visible, onClose, currentUserId, onFamil
                         <View style={{ backgroundColor: handleColor }} className="w-10 h-1 rounded-full self-center mb-6" />
 
                         {(isLoading || isFamilyLoading) && !families.length ? renderSkeleton() : (
-                            <>
+                            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 20 }}>
                                 {view === 'list' && renderListView()}
                                 {view === 'create' && renderCreateView()}
                                 {view === 'invite' && renderInviteView()}
-                            </>
+                            </ScrollView>
                         )}
 
                         {/* Loading Overlay */}
@@ -611,35 +613,37 @@ export function FamilyManagementModal({ visible, onClose, currentUserId, onFamil
                 </View>
             </Modal>
 
-            {/* Confirmation Modal */}
-            {confirmConfig && (
-                <Modal visible={!!confirmConfig} transparent animationType="fade">
-                    <View className="flex-1 bg-black/50 items-center justify-center p-6">
-                        <View style={{ backgroundColor: sheetBg }} className="p-6 rounded-3xl w-full shadow-xl">
-                            <Text style={{ color: titleColor }} className="text-lg font-bold mb-2">{confirmConfig.title}</Text>
-                            <Text style={{ color: labelColor }} className="mb-6">{confirmConfig.message}</Text>
-                            <View className="flex-row gap-3">
-                                <Pressable
-                                    style={{ backgroundColor: isDark ? '#374151' : '#f3f4f6' }}
-                                    className="flex-1 p-3 rounded-xl items-center"
-                                    onPress={() => setConfirmConfig(null)}
-                                >
-                                    <Text style={{ color: textColor }} className="font-bold">{t('common.cancel')}</Text>
-                                </Pressable>
-                                <Pressable
-                                    className={cn("flex-1 p-3 rounded-xl items-center", confirmConfig.isDestructive ? "bg-red-600" : "bg-blue-600")}
-                                    onPress={() => {
-                                        confirmConfig.onConfirm();
-                                        setConfirmConfig(null);
-                                    }}
-                                >
-                                    <Text className="font-bold text-white">{confirmConfig.actionLabel}</Text>
-                                </Pressable>
-                            </View>
-                        </View>
-                    </View>
-                </Modal>
-            )}
+            <ConfirmationModal
+                visible={isDeleteModalVisible}
+                onClose={() => setIsDeleteModalVisible(false)}
+                onConfirm={executeDeleteFamily}
+                title={t('family.deleteFamilyConfirm')}
+                message={t('family.deleteFamilyMsg')}
+                confirmText={t('common.delete')}
+                variant="danger"
+                isLoading={switching}
+            />
+
+            <ConfirmationModal
+                visible={isRemoveMemberModalVisible}
+                onClose={() => setIsRemoveMemberModalVisible(false)}
+                onConfirm={() => targetMemberId && executeRemoveMember(targetMemberId)}
+                title={t('family.removeMemberConfirm')}
+                message={t('family.removeMemberMsg')}
+                confirmText={t('family.removeMember')}
+                variant="danger"
+                isLoading={switching}
+            />
+
+            <ConfirmationModal
+                visible={isUpdateRoleModalVisible}
+                onClose={() => setIsUpdateRoleModalVisible(false)}
+                onConfirm={() => targetMemberId && targetRole && executeUpdateRole(targetMemberId, targetRole)}
+                title={targetRole === 'admin' ? t('family.makeAdminConfirm') : t('family.revokeAdminConfirm')}
+                message={targetRole === 'admin' ? t('family.makeAdminMsg') : t('family.revokeAdminMsg')}
+                confirmText={targetRole === 'admin' ? t('common.confirm') : t('family.revokeAdmin')}
+                isLoading={switching}
+            />
         </>
     );
 }

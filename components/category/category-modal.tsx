@@ -1,4 +1,4 @@
-import { View, Text, Modal, Pressable, ScrollView, TextInput, ActivityIndicator, Alert, KeyboardAvoidingView, Platform, TouchableOpacity } from "react-native";
+import { View, Text, Modal, Pressable, ScrollView, TextInput, ActivityIndicator, KeyboardAvoidingView, Platform, TouchableOpacity } from "react-native";
 import { useState, useEffect, useCallback } from "react";
 import DraggableFlatList, { ScaleDecorator, RenderItemParams } from "react-native-draggable-flatlist";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
@@ -9,6 +9,9 @@ import { cn } from "../../lib/utils";
 import { useFamily } from "../../context/family-context";
 import { useTheme } from "../../context/theme-context";
 import { useLanguage } from "../../context/language-context";
+import { Button } from "../ui/button";
+import { useToast } from "../ui/toast";
+import { ConfirmationModal } from "../ui/confirmation-modal";
 
 interface Category {
     id: string;
@@ -42,6 +45,8 @@ export function CategoryManagementModal({ visible, onClose }: CategoryManagement
     // Form State
     const [editingCategory, setEditingCategory] = useState<Category | null>(null);
     const [formName, setFormName] = useState("");
+    const [isDeleteModalVisible, setIsDeleteModalVisible] = useState(false);
+    const { show } = useToast();
 
     // Theme colors (matched to Account Modal)
     const sheetBg = isDark ? '#1f2937' : '#ffffff';
@@ -145,38 +150,35 @@ export function CategoryManagementModal({ visible, onClose }: CategoryManagement
             setEditingCategory(null);
             fetchCategories();
         } catch (e) {
-            Alert.alert(t('common.error'), t('categoryManager.failedSave'));
+            show(t('categoryManager.failedSave'), 'error');
         } finally {
             setIsSaving(false);
         }
     };
 
-    const handleDelete = async () => {
+    const confirmDelete = async () => {
         if (!editingCategory) return;
-        Alert.alert(t('categoryManager.deleteCategory'), t('categoryManager.deleteCategoryMsg'), [
-            { text: t('common.cancel'), style: "cancel" },
-            {
-                text: t('common.delete'),
-                style: "destructive",
-                onPress: async () => {
-                    setIsSaving(true);
-                    try {
-                        const headers = await getAuthHeader();
-                        await fetch(`${API_URL}/mobile/categories/${editingCategory.id}`, {
-                            method: 'DELETE',
-                            headers
-                        });
-                        setView("list");
-                        setEditingCategory(null);
-                        fetchCategories();
-                    } catch (e) {
-                        Alert.alert(t('common.error'), t('categoryManager.failedDelete'));
-                    } finally {
-                        setIsSaving(false);
-                    }
-                }
-            }
-        ]);
+        setIsSaving(true);
+        try {
+            const headers = await getAuthHeader();
+            await fetch(`${API_URL}/mobile/categories/${editingCategory.id}`, {
+                method: 'DELETE',
+                headers
+            });
+            setView("list");
+            setEditingCategory(null);
+            fetchCategories();
+            show(t('categoryManager.deleteSuccess') || 'Category deleted', 'success');
+        } catch (e) {
+            show(t('categoryManager.failedDelete'), 'error');
+        } finally {
+            setIsSaving(false);
+            setIsDeleteModalVisible(false);
+        }
+    };
+
+    const handleDelete = () => {
+        setIsDeleteModalVisible(true);
     };
 
     const handleDragEnd = async ({ data }: { data: Category[] }) => {
@@ -418,6 +420,18 @@ export function CategoryManagementModal({ visible, onClose }: CategoryManagement
                     </View>
                 </KeyboardAvoidingView>
             </GestureHandlerRootView>
+
+            <ConfirmationModal
+                visible={isDeleteModalVisible}
+                onClose={() => setIsDeleteModalVisible(false)}
+                onConfirm={confirmDelete}
+                title={t('categoryManager.deleteCategory')}
+                message={t('categoryManager.deleteCategoryMsg')}
+                confirmText={t('common.delete')}
+                cancelText={t('common.cancel')}
+                variant="danger"
+                isLoading={isSaving}
+            />
         </Modal>
     );
 }

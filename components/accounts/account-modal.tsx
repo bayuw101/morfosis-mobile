@@ -1,4 +1,4 @@
-import { View, Text, Modal, Pressable, ScrollView, TextInput, ActivityIndicator, Image, Alert, KeyboardAvoidingView, Platform, TouchableOpacity } from "react-native";
+import { View, Text, Modal, Pressable, ScrollView, TextInput, ActivityIndicator, Image, KeyboardAvoidingView, Platform, TouchableOpacity } from "react-native";
 import { useState, useEffect, useCallback } from "react";
 import { X, Plus, Wallet, Landmark, Banknote, TrendingUp, Check, Search, ChevronUp, ChevronDown, Pencil, Trash2, GripVertical, CreditCard } from "lucide-react-native";
 import DraggableFlatList, { ScaleDecorator, RenderItemParams } from "react-native-draggable-flatlist";
@@ -8,6 +8,8 @@ import { cn } from "../../lib/utils";
 import { getAuthHeader } from "../../lib/auth";
 import { useTheme } from "../../context/theme-context";
 import { useLanguage } from "../../context/language-context";
+import { useToast } from "../ui/toast";
+import { ConfirmationModal } from "../ui/confirmation-modal";
 
 // Account Types Configuration
 const ACCOUNT_TYPES = [
@@ -57,15 +59,8 @@ export function AccountManagementModal({ visible, onClose, onAccountsUpdated }: 
     const [logoOptions, setLogoOptions] = useState<LogoOption[]>([]);
     const [logoSearch, setLogoSearch] = useState("");
 
-    // Confirm dialog
-    const [confirmConfig, setConfirmConfig] = useState<{
-        visible: boolean;
-        title: string;
-        message: string;
-        actionLabel: string;
-        isDestructive?: boolean;
-        onConfirm: () => Promise<void> | void;
-    } | null>(null);
+    const [isDeleteModalVisible, setIsDeleteModalVisible] = useState(false);
+    const { show } = useToast();
 
     // Theme colors
     const sheetBg = isDark ? '#1f2937' : '#ffffff';
@@ -138,7 +133,7 @@ export function AccountManagementModal({ visible, onClose, onAccountsUpdated }: 
 
     const handleSave = async () => {
         if (!formName.trim()) {
-            Alert.alert(t('common.error'), t('accountManager.enterAccountName'));
+            show(t('accountManager.enterAccountName'), 'error');
             return;
         }
 
@@ -175,13 +170,14 @@ export function AccountManagementModal({ visible, onClose, onAccountsUpdated }: 
                 await fetchAccounts();
                 setView("list");
                 resetForm();
+                show(editingAccount ? (t('accountManager.saveSuccess') || 'Changes saved') : (t('accountManager.createSuccess') || 'Account created'), 'success');
                 if (onAccountsUpdated) onAccountsUpdated();
             } else {
                 const err = await res.json();
-                Alert.alert(t('common.error'), err.error || t('accountManager.failedSave'));
+                show(err.error || t('accountManager.failedSave'), 'error');
             }
         } catch (e) {
-            Alert.alert(t('common.error'), t('accountManager.networkError'));
+            show(t('accountManager.networkError'), 'error');
         } finally {
             setIsSaving(false);
         }
@@ -200,27 +196,22 @@ export function AccountManagementModal({ visible, onClose, onAccountsUpdated }: 
                 await fetchAccounts();
                 setView("list");
                 resetForm();
+                show(t('accountManager.deleteSuccess') || 'Account deleted', 'success');
                 if (onAccountsUpdated) onAccountsUpdated();
             } else {
                 const err = await res.json();
-                Alert.alert(t('common.error'), err.error || t('accountManager.failedDelete'));
+                show(err.error || t('accountManager.failedDelete'), 'error');
             }
         } catch (e) {
-            Alert.alert(t('common.error'), t('accountManager.networkError'));
+            show(t('accountManager.networkError'), 'error');
         } finally {
             setIsSaving(false);
+            setIsDeleteModalVisible(false);
         }
     };
 
     const requestDelete = () => {
-        setConfirmConfig({
-            visible: true,
-            title: t('accountManager.deleteAccount'),
-            message: t('accountManager.deleteAccountMsg'),
-            actionLabel: t('common.delete'),
-            isDestructive: true,
-            onConfirm: executeDelete
-        });
+        setIsDeleteModalVisible(true);
     };
 
     const handleDragEnd = async ({ data }: { data: Account[] }) => {
@@ -569,35 +560,17 @@ export function AccountManagementModal({ visible, onClose, onAccountsUpdated }: 
                 </GestureHandlerRootView>
             </Modal>
 
-            {/* Confirmation Modal */}
-            {confirmConfig && (
-                <Modal visible={!!confirmConfig} transparent animationType="fade">
-                    <View className="flex-1 bg-black/50 items-center justify-center p-6">
-                        <View style={{ backgroundColor: sheetBg }} className="p-6 rounded-3xl w-full shadow-xl">
-                            <Text style={{ color: titleColor }} className="text-lg font-bold mb-2">{confirmConfig.title}</Text>
-                            <Text style={{ color: labelColor }} className="mb-6">{confirmConfig.message}</Text>
-                            <View className="flex-row gap-3">
-                                <Pressable
-                                    style={{ backgroundColor: closeBtnBg }}
-                                    className="flex-1 p-3 rounded-xl items-center"
-                                    onPress={() => setConfirmConfig(null)}
-                                >
-                                    <Text style={{ color: textColor }} className="font-bold">{t('common.cancel')}</Text>
-                                </Pressable>
-                                <Pressable
-                                    className={cn("flex-1 p-3 rounded-xl items-center", confirmConfig.isDestructive ? "bg-red-600" : "bg-blue-600")}
-                                    onPress={() => {
-                                        confirmConfig.onConfirm();
-                                        setConfirmConfig(null);
-                                    }}
-                                >
-                                    <Text className="font-bold text-white">{confirmConfig.actionLabel}</Text>
-                                </Pressable>
-                            </View>
-                        </View>
-                    </View>
-                </Modal>
-            )}
+            <ConfirmationModal
+                visible={isDeleteModalVisible}
+                onClose={() => setIsDeleteModalVisible(false)}
+                onConfirm={executeDelete}
+                title={t('accountManager.deleteAccount')}
+                message={t('accountManager.deleteAccountMsg')}
+                confirmText={t('common.delete')}
+                cancelText={t('common.cancel')}
+                variant="danger"
+                isLoading={isSaving}
+            />
         </>
     );
 }

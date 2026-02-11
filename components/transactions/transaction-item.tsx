@@ -16,6 +16,7 @@ interface Transaction {
     account?: { id: string; name: string; };
     to_account?: { id: string; name: string; };
     plan_id?: string;
+    created_by?: { id: string; name: string; image?: string; };
 }
 
 const formatCurrency = (value: number) => {
@@ -104,6 +105,9 @@ export const TransactionItem = ({ transaction, isLast, onDelete, isDark = false 
                         )}
                         {transaction.type === 'transfer' && transaction.to_account && (
                             <><Text style={{ color: textMuted }} className="text-[10px] font-medium mx-1">→</Text><Text style={{ color: textMuted }} className="text-[10px] font-medium" numberOfLines={1}>{transaction.to_account.name}</Text></>
+                        )}
+                        {transaction.created_by && transaction.created_by.name && (
+                            <><View style={{ backgroundColor: dotColor }} className="w-0.5 h-0.5 rounded-full mx-1.5" /><Text style={{ color: textMuted }} className="text-[10px] font-medium max-w-[80px]" numberOfLines={1}>{transaction.created_by.name.split(' ')[0]}</Text></>
                         )}
                     </View>
                 </View>

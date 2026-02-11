@@ -4,7 +4,8 @@ import React, { createContext, useContext, useState, useCallback } from 'react';
 interface TransactionModalContextType {
     isOpen: boolean;
     initialType: "expense" | "income" | "transfer";
-    openModal: (type?: "expense" | "income" | "transfer") => void;
+    initialAccountId: string | null;
+    openModal: (type?: "expense" | "income" | "transfer", accountId?: string) => void;
     closeModal: () => void;
     lastRefresh: number;
     triggerRefresh: () => void;
@@ -15,15 +16,18 @@ const TransactionModalContext = createContext<TransactionModalContextType | unde
 export function TransactionModalProvider({ children }: { children: React.ReactNode }) {
     const [isOpen, setIsOpen] = useState(false);
     const [initialType, setInitialType] = useState<"expense" | "income" | "transfer">("expense");
+    const [initialAccountId, setInitialAccountId] = useState<string | null>(null);
     const [lastRefresh, setLastRefresh] = useState(Date.now());
 
-    const openModal = useCallback((type: "expense" | "income" | "transfer" = "expense") => {
+    const openModal = useCallback((type: "expense" | "income" | "transfer" = "expense", accountId?: string) => {
         setInitialType(type);
+        setInitialAccountId(accountId || null);
         setIsOpen(true);
     }, []);
 
     const closeModal = useCallback(() => {
         setIsOpen(false);
+        setInitialAccountId(null);
     }, []);
 
     const triggerRefresh = useCallback(() => {
@@ -31,7 +35,7 @@ export function TransactionModalProvider({ children }: { children: React.ReactNo
     }, []);
 
     return (
-        <TransactionModalContext.Provider value={{ isOpen, initialType, openModal, closeModal, lastRefresh, triggerRefresh }}>
+        <TransactionModalContext.Provider value={{ isOpen, initialType, initialAccountId, openModal, closeModal, lastRefresh, triggerRefresh }}>
             {children}
         </TransactionModalContext.Provider>
     );

@@ -8,6 +8,7 @@ import { cn } from "../lib/utils";
 import { getAuthHeader } from "../lib/auth";
 import { useTheme } from "../context/theme-context";
 import { useLanguage } from "../context/language-context";
+import { useToast } from "./ui/toast";
 
 import { Button } from "./ui/button";
 import { InlineLoader } from "./ui/loaders";
@@ -17,6 +18,7 @@ interface TransactionFormModalProps {
     onClose: () => void;
     onSuccess: () => void;
     initialType?: "income" | "expense" | "transfer";
+    initialAccountId?: string | null;
 }
 
 const TRANSACTION_TYPES = [
@@ -25,9 +27,10 @@ const TRANSACTION_TYPES = [
     { key: 'transfer', labelKey: 'transactionTypes.transfer', icon: ArrowRightLeft, color: '#3b82f6' },
 ] as const;
 
-export function TransactionFormModal({ visible, onClose, onSuccess, initialType = 'expense' }: TransactionFormModalProps) {
+export function TransactionFormModal({ visible, onClose, onSuccess, initialType = 'expense', initialAccountId }: TransactionFormModalProps) {
     const { isDark } = useTheme();
     const { t } = useLanguage();
+    const toast = useToast();
     const [type, setType] = useState<"income" | "expense" | "transfer">("expense");
     const [amount, setAmount] = useState("");
     const [description, setDescription] = useState("");
@@ -81,7 +84,13 @@ export function TransactionFormModal({ visible, onClose, onSuccess, initialType 
                 setCategories(catData);
                 setBudgets(budgetsList);
 
-                if (accountsList.length > 0) setSelectedAccount(accountsList[0]);
+                if (initialAccountId) {
+                    const matched = accountsList.find((a: any) => a.id === initialAccountId);
+                    if (matched) setSelectedAccount(matched);
+                    else if (accountsList.length > 0) setSelectedAccount(accountsList[0]);
+                } else if (accountsList.length > 0) {
+                    setSelectedAccount(accountsList[0]);
+                }
 
                 const defaultBudget = budgetsList.find((b: any) => b.is_default);
                 if (defaultBudget) {
@@ -164,11 +173,11 @@ export function TransactionFormModal({ visible, onClose, onSuccess, initialType 
 
     const handleSubmit = async () => {
         if (!amount || !selectedAccount) {
-            alert(t('transactionForm.enterAmountAndAccount'));
+            toast.show(t('transactionForm.enterAmountAndAccount'), 'error');
             return;
         }
         if (type === 'transfer' && !selectedTargetAccount) {
-            alert(t('transactionForm.selectTargetAccount'));
+            toast.show(t('transactionForm.selectTargetAccount'), 'error');
             return;
         }
 
@@ -204,13 +213,14 @@ export function TransactionFormModal({ visible, onClose, onSuccess, initialType 
                 setDescription("");
                 setDate(new Date());
                 setSelectedCategory(null);
+                toast.show(t('common.created'), 'success');
             } else {
                 const err = await res.json();
-                alert("Failed to create transaction: " + JSON.stringify(err));
+                toast.show(err.error || "Failed to create transaction", 'error');
             }
         } catch (error) {
             console.error("Submit error:", error);
-            alert(t('transactionForm.networkError'));
+            toast.show(t('transactionForm.networkError'), 'error');
         } finally {
             setIsSubmitting(false);
         }

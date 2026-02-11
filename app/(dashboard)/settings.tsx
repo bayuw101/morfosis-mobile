@@ -1,4 +1,4 @@
-import { View, Text, ScrollView, Pressable, Image, Alert, ActivityIndicator, Switch, Modal, FlatList } from "react-native";
+import { View, Text, ScrollView, Pressable, Image, ActivityIndicator, Switch, Modal, Platform } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
     CreditCard,
@@ -26,6 +26,7 @@ import { CategoryManagementModal } from "../../components/category/category-moda
 import { EditProfileModal } from "../../components/edit-profile-modal";
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { StatusBar } from "expo-status-bar";
+import { updateNotificationPreference, registerPushToken } from "../../lib/notifications";
 
 // Auth Header Helper
 import { getAuthHeader } from "../../lib/auth";
@@ -34,6 +35,11 @@ import { getAuthHeader } from "../../lib/auth";
 import { useTheme, ThemeMode } from "../../context/theme-context";
 import { useLanguage } from "../../context/language-context";
 import { LanguageCode } from "../../lib/i18n";
+
+// Shared Dashboard Components/Hooks
+import { useDashboardStyles } from "../../hooks/use-dashboard-styles";
+import { DashboardSheet } from "../../components/dashboard/dashboard-sheet";
+import { ConfirmationModal } from "../../components/ui/confirmation-modal";
 
 interface SettingsItemProps {
     icon: React.ElementType;
@@ -90,17 +96,23 @@ interface SelectionModalProps {
 }
 
 function SelectionModal({ visible, title, options, selectedValue, onSelect, onClose, isDark }: SelectionModalProps & { isDark?: boolean }) {
+    const insets = useSafeAreaInsets();
     return (
         <Modal visible={visible} animationType="fade" transparent>
             <Pressable className="flex-1 bg-black/50 justify-end" onPress={onClose}>
                 <Pressable style={{ backgroundColor: isDark ? '#1f2937' : '#ffffff' }} className="rounded-t-[32px] overflow-hidden" onPress={e => e.stopPropagation()}>
-                    <View style={{ borderBottomColor: isDark ? '#374151' : '#f3f4f6' }} className="p-5 border-b flex-row items-center justify-between">
+                    {/* Handle */}
+                    <View className="items-center py-2.5">
+                        <View style={{ backgroundColor: isDark ? '#374151' : '#e2e8f0' }} className="w-12 h-1.5 rounded-full" />
+                    </View>
+
+                    <View style={{ borderBottomColor: isDark ? '#374151' : '#f3f4f6' }} className="px-6 py-4 border-b flex-row items-center justify-between">
                         <Text style={{ color: isDark ? '#f9fafb' : '#111827' }} className="text-xl font-bold">{title}</Text>
-                        <Pressable onPress={onClose} style={{ backgroundColor: isDark ? '#374151' : '#f3f4f6' }} className="p-2 rounded-full">
+                        <Pressable onPress={onClose} style={{ backgroundColor: isDark ? '#374151' : '#f3f4f6' }} className="p-2 rounded-full active:opacity-70">
                             <X size={20} color={isDark ? '#d1d5db' : '#374151'} />
                         </Pressable>
                     </View>
-                    <View className="pb-8 pt-2">
+                    <View style={{ paddingBottom: insets.bottom + 20 }} className="pt-2">
                         {options.map((option) => (
                             <Pressable
                                 key={option.value}
@@ -138,16 +150,26 @@ interface InfoModalProps {
 }
 
 function InfoModal({ visible, title, content, onClose, isDark }: InfoModalProps & { isDark?: boolean }) {
+    const insets = useSafeAreaInsets();
     return (
-        <Modal visible={visible} animationType="slide" presentationStyle="pageSheet">
-            <View style={{ backgroundColor: isDark ? '#111827' : '#ffffff' }} className="flex-1">
-                <View style={{ borderBottomColor: isDark ? '#374151' : '#f3f4f6' }} className="px-5 py-4 border-b flex-row items-center justify-between mt-2">
+        <Modal visible={visible} animationType="slide" presentationStyle="formSheet">
+            <View style={{ backgroundColor: isDark ? '#111827' : '#ffffff', paddingTop: Platform.OS === 'android' ? insets.top : 0 }} className="flex-1">
+                {/* Visual Handle for iOS/Android Modals */}
+                <View className="items-center py-2">
+                    <View style={{ backgroundColor: isDark ? '#374151' : '#e2e8f0' }} className="w-12 h-1.5 rounded-full" />
+                </View>
+
+                <View style={{ borderBottomColor: isDark ? '#374151' : '#f3f4f6' }} className="px-6 py-4 border-b flex-row items-center justify-between">
                     <Text style={{ color: isDark ? '#f9fafb' : '#111827' }} className="text-xl font-bold">{title}</Text>
-                    <Pressable onPress={onClose} style={{ backgroundColor: isDark ? '#374151' : '#f3f4f6' }} className="p-2 rounded-full">
+                    <Pressable onPress={onClose} style={{ backgroundColor: isDark ? '#374151' : '#f3f4f6' }} className="p-2 rounded-full active:opacity-70">
                         <X size={20} color={isDark ? '#d1d5db' : '#374151'} />
                     </Pressable>
                 </View>
-                <ScrollView className="flex-1 px-6 py-6" contentContainerStyle={{ paddingBottom: 40 }}>
+                <ScrollView
+                    className="flex-1 px-6 py-6"
+                    contentContainerStyle={{ paddingBottom: insets.bottom + 40 }}
+                    showsVerticalScrollIndicator={false}
+                >
                     <Text style={{ color: isDark ? '#d1d5db' : '#4b5563' }} className="text-base leading-relaxed">{content}</Text>
                 </ScrollView>
             </View>
@@ -162,8 +184,11 @@ export default function SettingsScreen() {
     const [isLoggingOut, setIsLoggingOut] = useState(false);
 
     // Theme & Language from Context
-    const { themeMode, setThemeMode, isDark } = useTheme();
+    const { themeMode, setThemeMode } = useTheme();
     const { language, setLanguage, t } = useLanguage();
+
+    // Use Dashboard Styles (provides combined colors and isDark)
+    const { isDark, colors } = useDashboardStyles();
 
     // Modals state
     const [familyModalVisible, setFamilyModalVisible] = useState(false);
@@ -171,7 +196,7 @@ export default function SettingsScreen() {
     const [categoryModalVisible, setCategoryModalVisible] = useState(false);
     const [editProfileModalVisible, setEditProfileModalVisible] = useState(false);
 
-    // Preference State (notifications only - theme/language handled by context)
+    // Preference State
     const [notificationsEnabled, setNotificationsEnabled] = useState(true);
 
     // Selection Modals
@@ -182,13 +207,13 @@ export default function SettingsScreen() {
     const [infoModal, setInfoModal] = useState<{ visible: boolean; title: string; content: string }>({
         visible: false, title: "", content: ""
     });
+    const [isLogoutModalVisible, setIsLogoutModalVisible] = useState(false);
 
     const fetchUser = useCallback(async () => {
         try {
             const storedUser = await AsyncStorage.getItem('user_data');
             if (storedUser) setUser(JSON.parse(storedUser));
 
-            // Load preferences (only notifications - theme/language handled by contexts)
             const storedPrefs = await AsyncStorage.getItem('app_preferences');
             if (storedPrefs) {
                 const prefs = JSON.parse(storedPrefs);
@@ -221,32 +246,24 @@ export default function SettingsScreen() {
         } catch (e) { console.error("Save pref error", e); }
     };
 
-    const handleLogout = async () => {
-        Alert.alert(
-            t('settings.signOutConfirmTitle'),
-            t('settings.signOutConfirmMessage'),
-            [
-                { text: t('common.cancel'), style: "cancel" },
-                {
-                    text: t('settings.signOut'),
-                    style: "destructive",
-                    onPress: async () => {
-                        setIsLoggingOut(true);
-                        try {
-                            const { GoogleSignin } = require("@react-native-google-signin/google-signin");
-                            await GoogleSignin.signOut();
-                            await AsyncStorage.removeItem('user_data');
-                            router.replace('/(auth)/login');
-                        } catch (e) {
-                            console.error("Logout error:", e);
-                            router.replace('/(auth)/login');
-                        } finally {
-                            setIsLoggingOut(false);
-                        }
-                    }
-                }
-            ]
-        );
+    const handleLogout = () => {
+        setIsLogoutModalVisible(true);
+    };
+
+    const confirmLogout = async () => {
+        setIsLogoutModalVisible(false);
+        setIsLoggingOut(true);
+        try {
+            const { GoogleSignin } = require("@react-native-google-signin/google-signin");
+            await GoogleSignin.signOut();
+            await AsyncStorage.removeItem('user_data');
+            router.replace('/(auth)/login');
+        } catch (e) {
+            console.error("Logout error:", e);
+            router.replace('/(auth)/login');
+        } finally {
+            setIsLoggingOut(false);
+        }
     };
 
     const themeLabel = {
@@ -274,16 +291,8 @@ export default function SettingsScreen() {
 
     const insets = useSafeAreaInsets();
 
-    // Theme Helpers
-    const headerBg = isDark ? '#111827' : '#1e40af';
-    const contentBg = isDark ? '#1f2937' : '#f8fafc';
-    const cardBg = isDark ? '#374151' : '#ffffff';
-    const cardBorder = isDark ? '#4b5563' : '#e2e8f0';
-
-    // ... logic ...
-
     return (
-        <View style={{ flex: 1, backgroundColor: headerBg }}>
+        <View style={{ flex: 1, backgroundColor: colors.headerBg }}>
             <StatusBar style="light" />
 
             {/* Header */}
@@ -291,27 +300,14 @@ export default function SettingsScreen() {
                 <Text className="text-2xl font-bold text-white">{t('settings.title')}</Text>
             </View>
 
-            <View
-                style={{
-                    flex: 1,
-                    backgroundColor: contentBg,
-                    borderTopLeftRadius: 28,
-                    borderTopRightRadius: 28,
-                    overflow: 'hidden'
-                }}
-            >
-                {/* iOS-style Handle */}
-                <View className="items-center pt-3 pb-2">
-                    <View style={{ backgroundColor: isDark ? '#4b5563' : '#cbd5e1' }} className="w-10 h-1 rounded-full" />
-                </View>
-
+            <DashboardSheet>
                 <ScrollView
                     className="flex-1"
                     showsVerticalScrollIndicator={false}
                     contentContainerStyle={{ paddingBottom: 120, paddingTop: 4 }}
                 >
                     {/* Profile Card */}
-                    <View style={{ backgroundColor: cardBg, borderColor: cardBorder }} className="mx-4 mt-4 rounded-3xl border overflow-hidden shadow-sm">
+                    <View style={{ backgroundColor: colors.cardBg, borderColor: colors.cardBorder }} className="mx-4 mt-4 rounded-3xl border-0 overflow-hidden shadow-sm">
                         <View className="p-5 flex-row items-center">
                             <View className="h-16 w-16 rounded-2xl bg-gray-900 items-center justify-center overflow-hidden mr-4 shadow-sm">
                                 {user?.picture ? (
@@ -345,7 +341,7 @@ export default function SettingsScreen() {
 
                     {/* Account Management Section */}
                     <SettingsSectionHeader title={t('settings.accountManagement')} isDark={isDark} />
-                    <View style={{ backgroundColor: cardBg, borderColor: cardBorder }} className="mx-4 rounded-3xl overflow-hidden border shadow-sm">
+                    <View style={{ backgroundColor: colors.cardBg, borderColor: colors.cardBorder }} className="mx-4 rounded-3xl overflow-hidden border-0 shadow-sm">
                         <SettingsItem
                             icon={CreditCard}
                             iconColor="#2563eb"
@@ -379,7 +375,7 @@ export default function SettingsScreen() {
 
                     {/* Preferences Section */}
                     <SettingsSectionHeader title={t('settings.preferences')} isDark={isDark} />
-                    <View style={{ backgroundColor: cardBg, borderColor: cardBorder }} className="mx-4 rounded-3xl overflow-hidden border shadow-sm">
+                    <View style={{ backgroundColor: colors.cardBg, borderColor: colors.cardBorder }} className="mx-4 rounded-3xl overflow-hidden border-0 shadow-sm">
                         <SettingsItem
                             icon={Bell}
                             iconColor="#f59e0b"
@@ -390,6 +386,8 @@ export default function SettingsScreen() {
                                 const newVal = !notificationsEnabled;
                                 setNotificationsEnabled(newVal);
                                 savePreference('notifications', newVal);
+                                updateNotificationPreference(newVal);
+                                if (newVal) registerPushToken();
                             }}
                             isDark={isDark}
                             rightElement={
@@ -398,6 +396,8 @@ export default function SettingsScreen() {
                                     onValueChange={(val) => {
                                         setNotificationsEnabled(val);
                                         savePreference('notifications', val);
+                                        updateNotificationPreference(val);
+                                        if (val) registerPushToken();
                                     }}
                                     trackColor={{ false: isDark ? '#374151' : '#e2e8f0', true: "#3b82f6" }}
                                     thumbColor="#ffffff"
@@ -428,7 +428,7 @@ export default function SettingsScreen() {
 
                     {/* Support Section */}
                     <SettingsSectionHeader title={t('settings.support')} isDark={isDark} />
-                    <View style={{ backgroundColor: cardBg, borderColor: cardBorder }} className="mx-4 rounded-3xl overflow-hidden border shadow-sm">
+                    <View style={{ backgroundColor: colors.cardBg, borderColor: colors.cardBorder }} className="mx-4 rounded-3xl overflow-hidden border-0 shadow-sm">
                         <SettingsItem
                             icon={HelpCircle}
                             iconColor="#6366f1"
@@ -465,7 +465,7 @@ export default function SettingsScreen() {
                             disabled={isLoggingOut}
                             style={{ backgroundColor: isDark ? '#1f2937' : '#ffffff', borderColor: isDark ? '#7f1d1d' : '#fee2e2' }}
                             className={cn(
-                                "border rounded-2xl p-4 flex-row items-center justify-center gap-3 shadow-sm",
+                                "border rounded-2xl p-4 flex-row items-center justify-center gap-3 shadow-sm bg-red-50",
                                 isDark ? "active:bg-red-900/30" : "active:bg-red-50",
                                 isLoggingOut && "opacity-50"
                             )}
@@ -547,8 +547,19 @@ export default function SettingsScreen() {
                     onClose={() => setInfoModal({ ...infoModal, visible: false })}
                     isDark={isDark}
                 />
-            </View>
+
+                <ConfirmationModal
+                    visible={isLogoutModalVisible}
+                    onClose={() => setIsLogoutModalVisible(false)}
+                    onConfirm={confirmLogout}
+                    title={t('settings.signOutConfirmTitle')}
+                    message={t('settings.signOutConfirmMessage')}
+                    confirmText={t('settings.signOut')}
+                    cancelText={t('common.cancel')}
+                    variant="danger"
+                    isLoading={isLoggingOut}
+                />
+            </DashboardSheet>
         </View>
     );
 }
-

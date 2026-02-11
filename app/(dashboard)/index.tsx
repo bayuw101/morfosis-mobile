@@ -18,6 +18,9 @@ import { getAuthHeader } from "../../lib/auth";
 import { ScreenLoader } from "../../components/ui/loaders";
 import { StatusBar } from "expo-status-bar";
 import { Button } from "../../components/ui/button";
+import { useDashboardStyles } from "../../hooks/use-dashboard-styles";
+import { DashboardHeader } from "../../components/dashboard/dashboard-header";
+import { DashboardSheet } from "../../components/dashboard/dashboard-sheet";
 
 const ACCOUNT_TYPES: Record<string, { label: string; color: string; bg: string; darkBg: string }> = {
     'cash': { label: 'Cash', color: '#22c55e', bg: '#dcfce7', darkBg: '#166534' },
@@ -39,7 +42,7 @@ export default function DashboardScreen() {
     // Use Global Family Context
     const { activeFamily, isSwitching } = useFamily();
     // Theme and Language
-    const { isDark } = useTheme();
+    const { isDark, colors } = useDashboardStyles();
     const { t } = useLanguage();
 
     const [user, setUser] = useState<any>(null);
@@ -54,8 +57,12 @@ export default function DashboardScreen() {
     const [accountModalVisible, setAccountModalVisible] = useState(false);
     const [isMounted, setIsMounted] = useState(false);
 
+    const isMountedRef = useRef(false);
+
     useEffect(() => {
+        isMountedRef.current = true;
         setIsMounted(true);
+        return () => { isMountedRef.current = false; };
     }, []);
 
     useEffect(() => {
@@ -68,7 +75,7 @@ export default function DashboardScreen() {
         try {
             const AsyncStorage = require('@react-native-async-storage/async-storage').default;
             const storedUser = await AsyncStorage.getItem('user_data');
-            if (storedUser) setUser(JSON.parse(storedUser));
+            if (isMountedRef.current && storedUser) setUser(JSON.parse(storedUser));
 
             const headers = {
                 ...(await getAuthHeader()),
@@ -82,28 +89,35 @@ export default function DashboardScreen() {
                 fetch(`${API_URL}/mobile/transactions?limit=5&t=${Date.now()}`, { headers })
             ]);
 
-            if (accRes.ok) {
-                const accData = await accRes.json();
-                setAccounts(accData.accounts || accData || []);
-            }
-            if (budRes.ok) setBudgets(await budRes.json());
-            if (txRes.ok) {
-                const txData = await txRes.json();
-                // Handle both straight array or paginated/wrapped response
-                setTransactions(Array.isArray(txData) ? txData : (txData.data || txData.transactions || []));
+            if (isMountedRef.current) {
+                if (accRes.ok) {
+                    const accData = await accRes.json();
+                    if (isMountedRef.current) setAccounts(accData.accounts || accData || []);
+                }
+                if (budRes.ok) {
+                    const budData = await budRes.json();
+                    if (isMountedRef.current) setBudgets(budData);
+                }
+                if (txRes.ok) {
+                    const txData = await txRes.json();
+                    // Handle both straight array or paginated/wrapped response
+                    if (isMountedRef.current) setTransactions(Array.isArray(txData) ? txData : (txData.data || txData.transactions || []));
+                }
             }
 
             const meRes = await fetch(`${API_URL}/mobile/users/me`, { headers });
             if (meRes.ok) {
                 const freshUser = await meRes.json();
-                setUser(freshUser);
+                if (isMountedRef.current) setUser(freshUser);
                 await AsyncStorage.setItem('user_data', JSON.stringify(freshUser));
             }
         } catch (e) {
             console.error("Dashboard fetch error:", e);
         } finally {
-            setIsLoading(false);
-            setRefreshing(false);
+            if (isMountedRef.current) {
+                setIsLoading(false);
+                setRefreshing(false);
+            }
         }
     }, []);
 
@@ -156,23 +170,7 @@ export default function DashboardScreen() {
         return t('greetings.evening');
     };
 
-    // --- Theme-aware color helpers ---
-    const headerBg = isDark ? '#111827' : '#1e40af';
-    const headerCardBg = isDark ? 'rgba(31,41,55,0.8)' : 'rgba(255,255,255,0.15)';
-    const headerCardBorder = isDark ? 'rgba(55,65,81,0.6)' : 'rgba(255,255,255,0.2)';
-    const headerSubText = isDark ? '#9ca3af' : 'rgba(255,255,255,0.7)';
-    const headerMainText = '#ffffff';
-    const familyPillBg = isDark ? 'rgba(31,41,55,0.8)' : 'rgba(255,255,255,0.2)';
-    const familyPillBorder = isDark ? '#374151' : 'rgba(255,255,255,0.3)';
-    const familyPillText = isDark ? '#d1d5db' : 'rgba(255,255,255,0.9)';
-
-    const contentBg = isDark ? '#1f2937' : '#f8fafc';
-    const cardBg = isDark ? '#374151' : '#ffffff';
-    const cardBorder = isDark ? '#4b5563' : '#e2e8f0';
-    const textPrimary = isDark ? '#f9fafb' : '#0f172a';
-    const textSecondary = isDark ? '#9ca3af' : '#64748b';
-    const textMuted = isDark ? '#6b7280' : '#94a3b8';
-    const dividerColor = isDark ? '#4b5563' : '#f1f5f9';
+    // Theme constants managed by useDashboardStyles
 
     // Loading State
     if (isLoading) {
@@ -180,46 +178,16 @@ export default function DashboardScreen() {
     }
 
     return (
-        <View style={{ flex: 1, backgroundColor: headerBg }}>
+        <View style={{ flex: 1, backgroundColor: colors.headerBg }}>
             <StatusBar style="light" />
             {/* Header Section - Blue gradient (light) / Dark (dark mode) */}
             <View style={{ paddingTop: insets.top }} className="px-6 pb-2">
-                {/* Top Row: User & Family */}
-                <View className="flex-row items-center justify-between mb-5">
-                    <Pressable onPress={() => setEditProfileModalVisible(true)} className="flex-row items-center gap-3 active:opacity-80">
-                        <View style={{
-                            borderColor: isDark ? '#4b5563' : 'rgba(255,255,255,0.4)',
-                        }} className="h-12 w-12 bg-white/20 rounded-full items-center justify-center overflow-hidden border-2">
-                            {user?.picture ? (
-                                <Image source={{ uri: user.picture }} style={{ width: '100%', height: '100%' }} />
-                            ) : (
-                                <Text className="font-bold text-white text-lg">{user?.name?.charAt(0) || "U"}</Text>
-                            )}
-                        </View>
-                        <View>
-                            <Text style={{ color: headerSubText }} className="text-[10px] font-medium uppercase tracking-wider">{getGreeting()}</Text>
-                            <View className="flex-row items-center gap-1.5">
-                                <Text className="text-lg font-bold text-white">{user?.name?.split(' ')[0] || "User"}</Text>
-                                <Edit2 size={11} color={headerSubText} />
-                            </View>
-                        </View>
-                    </Pressable>
-
-                    <Pressable
-                        style={{
-                            backgroundColor: familyPillBg,
-                            borderColor: familyPillBorder,
-                        }}
-                        className="flex-row items-center border rounded-full px-3 py-2 gap-2 active:opacity-80"
-                        onPress={() => setFamilyModalVisible(true)}
-                    >
-                        <View className="h-5 w-5 rounded-full bg-blue-400/30 items-center justify-center">
-                            <Users size={10} color="#93c5fd" />
-                        </View>
-                        <Text style={{ color: familyPillText }} className="text-xs font-semibold">{activeFamily?.name || "My Family"}</Text>
-                        <ChevronDown size={12} color={familyPillText} />
-                    </Pressable>
-                </View>
+                <DashboardHeader
+                    user={user}
+                    activeFamily={activeFamily}
+                    onProfilePress={() => setEditProfileModalVisible(true)}
+                    onFamilyPress={() => setFamilyModalVisible(true)}
+                />
 
                 {/* Main Stats Card */}
                 {activePlan ? (
@@ -229,26 +197,26 @@ export default function DashboardScreen() {
                             <View className="h-7 w-7 bg-blue-400/20 rounded-lg items-center justify-center">
                                 <Target size={14} color="#93c5fd" />
                             </View>
-                            <Text style={{ color: headerSubText }} className="text-xs font-medium uppercase tracking-wider">{t('dashboard.activePlan')}</Text>
+                            <Text style={{ color: colors.headerSubText }} className="text-xs font-medium uppercase tracking-wider">{t('dashboard.activePlan')}</Text>
                             <View className="flex-1" />
                             <Text className="text-blue-300 font-bold text-sm">{activePlan.name}</Text>
                         </View>
 
                         <View style={{
-                            backgroundColor: headerCardBg,
-                            borderColor: headerCardBorder,
+                            backgroundColor: colors.headerCardBg,
+                            borderColor: colors.headerCardBorder,
                         }} className="rounded-2xl p-4 border">
                             {/* Balance Display */}
                             <View className="flex-row items-end justify-between mb-4">
                                 <View>
-                                    <Text style={{ color: headerSubText }} className="text-xs mb-1">{t('dashboard.remainingBudget')}</Text>
+                                    <Text style={{ color: colors.headerSubText }} className="text-xs mb-1">{t('dashboard.remainingBudget')}</Text>
                                     <Text className="text-3xl font-bold text-white">Rp {formatCurrency(planRemaining, false)}</Text>
                                 </View>
                                 <View className="items-end">
                                     <Text className={cn("text-2xl font-bold", planPercentage > 80 ? "text-red-400" : "text-emerald-400")}>
                                         {planPercentage.toFixed(0)}%
                                     </Text>
-                                    <Text style={{ color: headerSubText }} className="text-[10px]">{t('dashboard.used')}</Text>
+                                    <Text style={{ color: colors.headerSubText }} className="text-[10px]">{t('dashboard.used')}</Text>
                                 </View>
                             </View>
 
@@ -262,8 +230,8 @@ export default function DashboardScreen() {
 
                             {/* Spent / Total */}
                             <View className="flex-row justify-between">
-                                <Text style={{ color: headerSubText }} className="text-xs">Rp {formatCurrency(planSpent)} {t('dashboard.spent')}</Text>
-                                <Text style={{ color: headerSubText }} className="text-xs">{t('dashboard.of')} Rp {formatCurrency(planAmount)}</Text>
+                                <Text style={{ color: colors.headerSubText }} className="text-xs">Rp {formatCurrency(planSpent)} {t('dashboard.spent')}</Text>
+                                <Text style={{ color: colors.headerSubText }} className="text-xs">{t('dashboard.of')} Rp {formatCurrency(planAmount)}</Text>
                             </View>
                         </View>
 
@@ -291,10 +259,10 @@ export default function DashboardScreen() {
                     /* Balance Summary (No Plan) */
                     <View className="mb-4">
                         <View style={{
-                            backgroundColor: headerCardBg,
-                            borderColor: headerCardBorder,
+                            backgroundColor: colors.headerCardBg,
+                            borderColor: colors.headerCardBorder,
                         }} className="rounded-2xl p-5 border">
-                            <Text style={{ color: headerSubText }} className="text-xs mb-1">{t('dashboard.totalBalance')}</Text>
+                            <Text style={{ color: colors.headerSubText }} className="text-xs mb-1">{t('dashboard.totalBalance')}</Text>
                             <Text className="text-3xl font-bold text-white mb-4">Rp {formatCurrency(totalBalance, false)}</Text>
 
                             <View className="flex-row gap-4">
@@ -339,14 +307,9 @@ export default function DashboardScreen() {
             </View>
 
             {/* Content Card - Slides Up */}
-            <Animated.View
-                style={{
-                    flex: 1,
-                    backgroundColor: contentBg,
-                    borderTopLeftRadius: 28,
-                    borderTopRightRadius: 28,
-                    overflow: 'hidden',
-                    marginTop: -14,
+            <DashboardSheet
+                style={{ marginTop: -14 }}
+                animatedStyle={{
                     transform: [{
                         translateY: slideAnim.interpolate({
                             inputRange: [0, 1],
@@ -355,10 +318,7 @@ export default function DashboardScreen() {
                     }]
                 }}
             >
-                {/* iOS-style Handle */}
-                <View className="items-center pt-3 pb-2">
-                    <View style={{ backgroundColor: isDark ? '#4b5563' : '#cbd5e1' }} className="w-10 h-1 rounded-full" />
-                </View>
+
 
                 <ScrollView
                     showsVerticalScrollIndicator={false}
@@ -368,7 +328,7 @@ export default function DashboardScreen() {
                     {/* Accounts Section */}
                     <View className="mb-5">
                         <View className="flex-row items-center justify-between px-5 mb-3">
-                            <Text style={{ color: textPrimary }} className="text-base font-bold">{t('dashboard.myAccounts')}</Text>
+                            <Text style={{ color: colors.textPrimary }} className="text-base font-bold">{t('dashboard.myAccounts')}</Text>
                             <Pressable onPress={() => setAccountModalVisible(true)} className="flex-row items-center gap-1 active:opacity-70">
                                 <Text className="text-blue-500 font-semibold text-xs">{t('common.manage')}</Text>
                                 <ChevronRight size={14} color="#3b82f6" />
@@ -382,7 +342,11 @@ export default function DashboardScreen() {
                                     const isDefault = index === 0;
 
                                     return (
-                                        <Pressable key={acc.id} className="active:scale-[0.98]">
+                                        <Pressable
+                                            key={acc.id}
+                                            onPress={() => openModal('expense', acc.id)}
+                                            className="active:scale-[0.98]"
+                                        >
                                             <View className={cn(
                                                 "w-40 p-4 rounded-2xl border relative overflow-hidden",
                                                 isDefault
@@ -396,8 +360,8 @@ export default function DashboardScreen() {
                                                 shadowRadius: 8,
                                                 elevation: 8,
                                             } : {
-                                                backgroundColor: cardBg,
-                                                borderColor: cardBorder,
+                                                backgroundColor: colors.cardBg,
+                                                borderColor: colors.cardBorder,
                                             }}>
                                                 {/* Decorative elements for default account */}
                                                 {isDefault && (
@@ -409,7 +373,7 @@ export default function DashboardScreen() {
 
                                                 <View className="flex-row items-center justify-between mb-3">
                                                     <View style={{
-                                                        backgroundColor: isDefault ? 'rgba(255,255,255,0.2)' : (isDark ? '#1f2937' : '#f1f5f9'),
+                                                        backgroundColor: isDefault ? 'rgba(255,255,255,0.2)' : (isDark ? '#f1f5f9' : '#f1f5f9'),
                                                     }} className="h-9 w-9 rounded-xl items-center justify-center overflow-hidden">
                                                         {acc.logo ? (
                                                             <Image source={{ uri: `${BASE_URL}/bank-logo/${acc.logo}` }} style={{ width: 24, height: 24 }} resizeMode="contain" />
@@ -437,10 +401,10 @@ export default function DashboardScreen() {
                                                     )}
                                                 </View>
 
-                                                <Text style={{ color: isDefault ? '#bfdbfe' : textSecondary }} className="text-xs font-medium mb-0.5" numberOfLines={1}>
+                                                <Text style={{ color: isDefault ? '#bfdbfe' : colors.textSecondary }} className="text-xs font-medium mb-0.5" numberOfLines={1}>
                                                     {acc.name}
                                                 </Text>
-                                                <Text style={{ color: isDefault ? '#ffffff' : textPrimary }} className="font-bold text-base">
+                                                <Text style={{ color: isDefault ? '#ffffff' : colors.textPrimary }} className="font-bold text-base">
                                                     Rp {formatCurrency(Number(acc.current_balance) || 0)}
                                                 </Text>
                                             </View>
@@ -449,9 +413,9 @@ export default function DashboardScreen() {
                                 })}
                             </ScrollView>
                         ) : (
-                            <View style={{ backgroundColor: cardBg, borderColor: cardBorder }} className="mx-5 p-6 rounded-2xl border items-center">
-                                <Wallet size={24} color={textMuted} />
-                                <Text style={{ color: textSecondary }} className="text-sm font-medium mt-2">{t('dashboard.noAccountsYet')}</Text>
+                            <View style={{ backgroundColor: colors.cardBg, borderColor: colors.cardBorder }} className="mx-5 p-6 rounded-2xl border items-center">
+                                <Wallet size={24} color={colors.textMuted} />
+                                <Text style={{ color: colors.textSecondary }} className="text-sm font-medium mt-2">{t('dashboard.noAccountsYet')}</Text>
                                 <Button
                                     label={t('dashboard.addAccount')}
                                     onPress={() => setAccountModalVisible(true)}
@@ -465,7 +429,7 @@ export default function DashboardScreen() {
                     {/* Recent Transactions */}
                     <View className="px-5">
                         <View className="flex-row items-center justify-between mb-3">
-                            <Text style={{ color: textPrimary }} className="text-base font-bold">{t('dashboard.recentActivity')}</Text>
+                            <Text style={{ color: colors.textPrimary }} className="text-base font-bold">{t('dashboard.recentActivity')}</Text>
                             <Pressable
                                 onPress={() => router.push('/(dashboard)/transactions')}
                                 className="flex-row items-center gap-1 active:opacity-70"
@@ -475,11 +439,11 @@ export default function DashboardScreen() {
                             </Pressable>
                         </View>
 
-                        <View style={{ backgroundColor: cardBg, borderColor: cardBorder }} className="rounded-2xl border overflow-hidden">
+                        <View style={{ backgroundColor: colors.cardBg, borderColor: colors.cardBorder }} className="rounded-2xl border overflow-hidden">
                             {transactions.length > 0 ? transactions.slice(0, 5).map((tx, i) => (
                                 <Pressable
                                     key={tx.id}
-                                    style={{ borderBottomColor: dividerColor }}
+                                    style={{ borderBottomColor: colors.divider }}
                                     className={cn("flex-row items-center p-4", isDark ? "active:bg-gray-600" : "active:bg-slate-50", i !== Math.min(transactions.length, 5) - 1 && "border-b")}
                                 >
                                     <View style={{
@@ -501,12 +465,22 @@ export default function DashboardScreen() {
                                     </View>
 
                                     <View className="flex-1">
-                                        <Text style={{ color: textPrimary }} className="font-semibold text-sm" numberOfLines={1}>
+                                        <Text style={{ color: colors.textPrimary }} className="font-semibold text-sm" numberOfLines={1}>
                                             {tx.description || tx.category?.name || t('transactions.transaction')}
                                         </Text>
-                                        <Text style={{ color: textMuted }} className="text-[11px] font-medium">
-                                            {new Date(tx.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
-                                        </Text>
+                                        <View className="flex-row items-center mt-0.5">
+                                            <Text style={{ color: colors.textMuted }} className="text-[11px] font-medium">
+                                                {new Date(tx.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+                                            </Text>
+                                            {tx.created_by && tx.created_by.name && (
+                                                <>
+                                                    <View style={{ backgroundColor: isDark ? '#4b5563' : '#d1d5db' }} className="w-0.5 h-0.5 rounded-full mx-1.5" />
+                                                    <Text style={{ color: colors.textMuted }} className="text-[11px] font-medium max-w-[80px]" numberOfLines={1}>
+                                                        {tx.created_by.name.split(' ')[0]}
+                                                    </Text>
+                                                </>
+                                            )}
+                                        </View>
                                     </View>
 
                                     <Text className={cn(
@@ -519,16 +493,16 @@ export default function DashboardScreen() {
                             )) : (
                                 <View className="p-8 items-center">
                                     <View style={{ backgroundColor: isDark ? '#374151' : '#f1f5f9' }} className="h-12 w-12 rounded-full items-center justify-center mb-3">
-                                        <Receipt size={20} color={textMuted} />
+                                        <Receipt size={20} color={colors.textMuted} />
                                     </View>
-                                    <Text style={{ color: textSecondary }} className="font-medium text-sm">{t('dashboard.noTransactionsYet')}</Text>
-                                    <Text style={{ color: textMuted }} className="text-xs text-center mt-1">{t('dashboard.startTracking')}</Text>
+                                    <Text style={{ color: colors.textSecondary }} className="font-medium text-sm">{t('dashboard.noTransactionsYet')}</Text>
+                                    <Text style={{ color: colors.textMuted }} className="text-xs text-center mt-1">{t('dashboard.startTracking')}</Text>
                                 </View>
                             )}
                         </View>
                     </View>
                 </ScrollView>
-            </Animated.View>
+            </DashboardSheet>
 
             {isMounted && familyModalVisible && (
                 <FamilyManagementModal

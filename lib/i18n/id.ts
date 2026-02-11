@@ -25,6 +25,9 @@ export const id: TranslationKeys = {
         reset: "Reset",
         viewAll: "Lihat Semua",
         manage: "Kelola",
+        created: "Berhasil dibuat",
+        updated: "Berhasil diperbarui",
+        deleted: "Berhasil dihapus",
     },
 
     // Greetings

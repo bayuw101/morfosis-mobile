@@ -15,7 +15,11 @@ import { useFamily } from "../../context/family-context";
 import { useTheme } from "../../context/theme-context";
 import { useLanguage } from "../../context/language-context";
 import { ScreenLoader } from "../../components/ui/loaders";
+import { useToast } from "../../components/ui/toast";
 import { StatusBar } from "expo-status-bar";
+import { useDashboardStyles } from "../../hooks/use-dashboard-styles";
+import { DashboardHeader } from "../../components/dashboard/dashboard-header";
+import { DashboardSheet } from "../../components/dashboard/dashboard-sheet";
 
 interface Transaction {
     id: string;
@@ -27,6 +31,7 @@ interface Transaction {
     account?: { id: string; name: string; };
     to_account?: { id: string; name: string; };
     plan_id?: string;
+    created_by?: { id: string; name: string; image?: string; };
 }
 
 interface Plan {
@@ -75,9 +80,10 @@ export default function TransactionsScreen() {
     const router = useRouter();
     const { lastRefresh } = useTransactionModal();
     const { activeFamily, isSwitching } = useFamily();
-    const { isDark } = useTheme();
     const { t } = useLanguage();
     const insets = useSafeAreaInsets();
+    const { isDark, colors } = useDashboardStyles();
+    const toast = useToast();
 
     const [isMounted, setIsMounted] = useState(false);
     const [user, setUser] = useState<any>(null);
@@ -91,6 +97,11 @@ export default function TransactionsScreen() {
     const [isDeleting, setIsDeleting] = useState(false);
 
     const [searchQuery, setSearchQuery] = useState("");
+    const [familyModalVisible, setFamilyModalVisible] = useState(false);
+    const [editProfileModalVisible, setEditProfileModalVisible] = useState(false);
+    const [filterModalVisible, setFilterModalVisible] = useState(false);
+    const [deleteConfirm, setDeleteConfirm] = useState<DeleteConfirmState>({ visible: false, transaction: null, impactMessage: '' });
+
     const [filters, setFilters] = useState<FilterState>({
         type: 'all',
         accountId: null,
@@ -99,34 +110,20 @@ export default function TransactionsScreen() {
         dateRange: { start: null, end: null }
     });
 
-    const [familyModalVisible, setFamilyModalVisible] = useState(false);
-    const [editProfileModalVisible, setEditProfileModalVisible] = useState(false);
-    const [filterModalVisible, setFilterModalVisible] = useState(false);
-    const [deleteConfirm, setDeleteConfirm] = useState<DeleteConfirmState>({ visible: false, transaction: null, impactMessage: '' });
+    const isMountedRef = useRef(false);
 
-    useEffect(() => { setIsMounted(true); }, []);
-
-    // --- Theme-aware colors (matching dashboard) ---
-    const headerBg = isDark ? '#111827' : '#1e40af';
-    const headerCardBg = isDark ? 'rgba(31,41,55,0.8)' : 'rgba(255,255,255,0.15)';
-    const headerCardBorder = isDark ? 'rgba(55,65,81,0.6)' : 'rgba(255,255,255,0.2)';
-    const headerSubText = isDark ? '#9ca3af' : 'rgba(255,255,255,0.7)';
-    const familyPillBg = isDark ? 'rgba(31,41,55,0.8)' : 'rgba(255,255,255,0.2)';
-    const familyPillBorder = isDark ? '#374151' : 'rgba(255,255,255,0.3)';
-    const familyPillText = isDark ? '#d1d5db' : 'rgba(255,255,255,0.9)';
-
-    const contentBg = isDark ? '#1f2937' : '#f8fafc';
-    const cardBg = isDark ? '#374151' : '#ffffff';
-    const cardBorder = isDark ? '#4b5563' : '#e2e8f0';
-    const textPrimary = isDark ? '#f9fafb' : '#0f172a';
-    const textSecondary = isDark ? '#9ca3af' : '#64748b';
-    const textMuted = isDark ? '#6b7280' : '#94a3b8';
+    useEffect(() => {
+        setIsMounted(true);
+        isMountedRef.current = true;
+        return () => { isMountedRef.current = false; };
+    }, []);
 
     const fetchTransactions = useCallback(async (currentFilters: FilterState, queryStr: string) => {
         try {
+            if (isMountedRef.current) setIsLoading(true);
             const AsyncStorage = require('@react-native-async-storage/async-storage').default;
             const storedUser = await AsyncStorage.getItem('user_data');
-            if (storedUser) setUser(JSON.parse(storedUser));
+            if (storedUser && isMountedRef.current) setUser(JSON.parse(storedUser));
 
             const headers = { ...(await getAuthHeader()), 'Cache-Control': 'no-cache' };
             const { type, planId, accountId, memberId, dateRange } = currentFilters;
@@ -147,20 +144,22 @@ export default function TransactionsScreen() {
 
             if (txRes.ok) {
                 const responseData = await txRes.json();
-                if (Array.isArray(responseData.data)) {
+                if (Array.isArray(responseData.data) && isMountedRef.current) {
                     setTransactions(responseData.data);
 
                     if (summary.income === 0 && summary.expense === 0) {
                         const income = responseData.data.filter((t: Transaction) => t.type === 'income').reduce((s: number, t: Transaction) => s + Number(t.amount), 0);
                         const expense = responseData.data.filter((t: Transaction) => t.type === 'expense').reduce((s: number, t: Transaction) => s + Math.abs(Number(t.amount)), 0);
-                        setSummary({ income, expense, balance: income - expense });
+                        if (isMountedRef.current) setSummary({ income, expense, balance: income - expense });
                     }
                 }
             }
 
             // Unblock UI immediately after transactions are loaded
-            setIsLoading(false);
-            setRefreshing(false);
+            if (isMountedRef.current) {
+                setIsLoading(false);
+                setRefreshing(false);
+            }
 
             // 2. Fetch True Summary (Async - Heavier) & Aux Data
             const summaryQuery = `${query}&only_summary=true`;
@@ -169,24 +168,28 @@ export default function TransactionsScreen() {
                 fetch(`${API_URL}/mobile/budgets?t=${Date.now()}`, { headers }),
                 fetch(`${API_URL}/mobile/accounts?t=${Date.now()}`, { headers })
             ]).then(async ([sumRes, planRes, accRes]) => {
+                if (!isMountedRef.current) return;
+
                 if (sumRes.ok) {
                     const sumData = await sumRes.json();
-                    if (sumData.summary) setSummary(sumData.summary);
+                    if (sumData.summary && isMountedRef.current) setSummary(sumData.summary);
                 }
                 if (planRes.ok) {
                     const plansData = await planRes.json();
-                    setPlans(Array.isArray(plansData) ? plansData : (plansData.plans || plansData.budgets || []));
+                    if (isMountedRef.current) setPlans(Array.isArray(plansData) ? plansData : (plansData.plans || plansData.budgets || []));
                 }
                 if (accRes.ok) {
                     const accData = await accRes.json();
-                    setAccounts(accData.accounts || []);
+                    if (isMountedRef.current) setAccounts(accData.accounts || []);
                 }
             }).catch(err => console.error("Aux fetch error:", err));
 
         } catch (e) {
             console.error(e);
-            setIsLoading(false);
-            setRefreshing(false);
+            if (isMountedRef.current) {
+                setIsLoading(false);
+                setRefreshing(false);
+            }
         }
     }, []);
 
@@ -249,6 +252,7 @@ export default function TransactionsScreen() {
                 setTransactions(prev => prev.filter(t => t.id !== deleteConfirm.transaction!.id));
                 setDeleteConfirm({ visible: false, transaction: null, impactMessage: '' });
                 fetchTransactions(filters, searchQuery);
+                toast.show(t('common.deleted'), 'success');
             }
         } catch (e) { console.error(e); } finally { setIsDeleting(false); }
     };
@@ -269,7 +273,7 @@ export default function TransactionsScreen() {
     const renderItem = ({ item, index, section }: { item: Transaction; index: number; section: { data: Transaction[] } }) => (
         <View className="mx-6 overflow-hidden"
             style={{
-                backgroundColor: cardBg,
+                backgroundColor: colors.cardBg,
                 shadowColor: isDark ? 'transparent' : '#e5e7eb',
                 shadowOffset: { width: 0, height: 1 },
                 shadowOpacity: 0.1,
@@ -290,25 +294,25 @@ export default function TransactionsScreen() {
     );
 
     const ListHeader = () => (
-        <View style={{ backgroundColor: contentBg }} className="px-6 py-3">
+        <View style={{ backgroundColor: colors.contentBg }} className="px-6 py-3">
             <View className="flex-row gap-3 mb-4">
-                <View style={{ backgroundColor: isDark ? '#374151' : '#ffffff', borderColor: cardBorder }} className="flex-1 flex-row items-center rounded-2xl px-4 h-12 border">
-                    <Search size={18} color={textMuted} />
+                <View style={{ backgroundColor: isDark ? '#374151' : '#ffffff', borderColor: colors.cardBorder }} className="flex-1 flex-row items-center rounded-2xl px-4 h-12 border">
+                    <Search size={18} color={colors.textMuted} />
                     <TextInput
                         className="flex-1 ml-3 text-[13px] font-semibold h-full"
-                        style={{ color: textPrimary }}
+                        style={{ color: colors.textPrimary }}
                         placeholder={t('transactions.searchPlaceholder')}
-                        placeholderTextColor={textMuted}
+                        placeholderTextColor={colors.textMuted}
                         value={searchQuery}
                         onChangeText={setSearchQuery}
                     />
-                    {searchQuery.length > 0 && <Pressable onPress={() => setSearchQuery("")}><X size={16} color={textMuted} /></Pressable>}
+                    {searchQuery.length > 0 && <Pressable onPress={() => setSearchQuery("")}><X size={16} color={colors.textMuted} /></Pressable>}
                 </View>
                 <Pressable
                     onPress={() => setFilterModalVisible(true)}
                     style={{
-                        backgroundColor: activeFilterCount > 0 ? '#2563eb' : cardBg,
-                        borderColor: activeFilterCount > 0 ? '#2563eb' : cardBorder,
+                        backgroundColor: activeFilterCount > 0 ? '#2563eb' : colors.cardBg,
+                        borderColor: activeFilterCount > 0 ? '#2563eb' : colors.cardBorder,
                     }}
                     className={cn("w-12 h-12 rounded-2xl items-center justify-center border", activeFilterCount > 0 && "shadow-md")}
                 >
@@ -317,51 +321,37 @@ export default function TransactionsScreen() {
                             <Text className="text-[9px] font-bold text-white">{activeFilterCount}</Text>
                         </View>
                     )}
-                    <Filter size={18} color={activeFilterCount > 0 ? "#fff" : textSecondary} />
+                    <Filter size={18} color={activeFilterCount > 0 ? "#fff" : colors.textSecondary} />
                 </Pressable>
             </View>
 
             <View className="flex-row items-center justify-between px-1 mb-1">
                 <View style={{ backgroundColor: isDark ? '#374151' : '#f1f5f9', borderColor: isDark ? '#4b5563' : '#e2e8f0' }} className="flex-row items-center gap-1.5 px-2.5 py-1.5 rounded-full border">
                     <View className="h-1.5 w-1.5 bg-blue-500 rounded-full" />
-                    <Text style={{ color: textSecondary }} className="text-[10px] font-bold uppercase tracking-wider">{t('transactions.swipeToDelete')}</Text>
+                    <Text style={{ color: colors.textSecondary }} className="text-[10px] font-bold uppercase tracking-wider">{t('transactions.swipeToDelete')}</Text>
                 </View>
             </View>
         </View>
     );
 
     return (
-        <View style={{ flex: 1, backgroundColor: headerBg }}>
+        <View style={{ flex: 1, backgroundColor: colors.headerBg }}>
             <StatusBar style="light" />
             {(!isMounted || isLoading) ? (
                 <ScreenLoader message={t('common.loading')} />
             ) : (
                 <>
                     <View style={{ paddingTop: insets.top }} className="px-6 pb-4">
-                        <View className="flex-row items-center justify-between mb-5">
-                            <Pressable onPress={() => setEditProfileModalVisible(true)} className="flex-row items-center gap-3 active:opacity-80">
-                                <View style={{ borderColor: isDark ? '#4b5563' : 'rgba(255,255,255,0.4)' }} className="h-12 w-12 bg-white/20 rounded-full items-center justify-center overflow-hidden border-2">
-                                    {user?.picture ? <Image source={{ uri: user.picture }} style={{ width: '100%', height: '100%' }} /> : <Text className="font-bold text-white text-lg">{user?.name?.charAt(0) || "U"}</Text>}
-                                </View>
-                                <View>
-                                    <Text style={{ color: headerSubText }} className="text-[10px] font-medium uppercase tracking-wider">{getGreeting()}</Text>
-                                    <View className="flex-row items-center gap-1.5"><Text className="text-lg font-bold text-white">{user?.name?.split(' ')[0] || "User"}</Text><Edit2 size={11} color={headerSubText} /></View>
-                                </View>
-                            </Pressable>
-                            <Pressable
-                                style={{ backgroundColor: familyPillBg, borderColor: familyPillBorder }}
-                                className="flex-row items-center border rounded-full px-3 py-2 gap-2 active:opacity-80"
-                                onPress={() => setFamilyModalVisible(true)}
-                            >
-                                <View className="h-5 w-5 rounded-full bg-blue-400/30 items-center justify-center"><Users size={10} color="#93c5fd" /></View>
-                                <Text style={{ color: familyPillText }} className="text-xs font-semibold">{activeFamily?.name || "My Family"}</Text>
-                                <ChevronDown size={12} color={familyPillText} />
-                            </Pressable>
-                        </View>
+                        <DashboardHeader
+                            user={user}
+                            activeFamily={activeFamily}
+                            onProfilePress={() => setEditProfileModalVisible(true)}
+                            onFamilyPress={() => setFamilyModalVisible(true)}
+                        />
 
 
-                        <View style={{ backgroundColor: headerCardBg, borderColor: headerCardBorder }} className="rounded-2xl mb-4 p-4 border">
-                            <View className="flex-row items-center gap-2 mb-1"><Receipt size={14} color="#93c5fd" /><Text style={{ color: headerSubText }} className="text-[10px] uppercase font-bold tracking-[2px]">{t('transactions.periodSummary')}</Text></View>
+                        <View style={{ backgroundColor: colors.headerCardBg, borderColor: colors.headerCardBorder }} className="rounded-2xl mb-4 p-4 border">
+                            <View className="flex-row items-center gap-2 mb-1"><Receipt size={14} color="#93c5fd" /><Text style={{ color: colors.headerSubText }} className="text-[10px] uppercase font-bold tracking-[2px]">{t('transactions.periodSummary')}</Text></View>
                             <View className="flex-row items-end justify-between">
                                 <View>
                                     <Text className="text-white text-3xl font-bold">Rp {formatCurrency(Math.abs(summary.balance))}</Text>
@@ -375,8 +365,7 @@ export default function TransactionsScreen() {
                         </View>
                     </View>
 
-                    <View style={{ backgroundColor: contentBg, marginTop: -14 }} className="flex-1 rounded-t-[32px] overflow-hidden">
-                        <View className="items-center pt-3 pb-1"><View style={{ backgroundColor: isDark ? '#4b5563' : '#cbd5e1' }} className="w-10 h-1 rounded-full" /></View>
+                    <DashboardSheet style={{ marginTop: -14 }}>
 
                         <Animated.SectionList
                             sections={sections}
@@ -392,22 +381,22 @@ export default function TransactionsScreen() {
                                 !refreshing ? (
                                     <View className="items-center justify-center py-20 px-10">
                                         <View style={{ backgroundColor: isDark ? '#374151' : '#f1f5f9' }} className="h-20 w-20 rounded-full items-center justify-center mb-4">
-                                            <Search size={32} color={textMuted} />
+                                            <Search size={32} color={colors.textMuted} />
                                         </View>
-                                        <Text style={{ color: textSecondary }} className="font-semibold text-center">{t('transactions.noResults')}</Text>
+                                        <Text style={{ color: colors.textSecondary }} className="font-semibold text-center">{t('transactions.noResults')}</Text>
                                     </View>
                                 ) : null
                             }
                         />
-                    </View>
+                    </DashboardSheet>
                 </>
             )}
 
             <Modal visible={deleteConfirm.visible} transparent animationType="fade">
                 <View className="flex-1 bg-black/60 items-center justify-center p-6">
                     <View style={{ backgroundColor: isDark ? '#1f2937' : '#ffffff' }} className="p-6 rounded-3xl w-full max-w-sm shadow-2xl">
-                        <Text style={{ color: textPrimary }} className="text-xl font-bold mb-2">{t('transactions.deleteTitle')}</Text>
-                        <Text style={{ color: textSecondary }} className="mb-6 leading-5">{deleteConfirm.impactMessage}</Text>
+                        <Text style={{ color: colors.textPrimary }} className="text-xl font-bold mb-2">{t('transactions.deleteTitle')}</Text>
+                        <Text style={{ color: colors.textSecondary }} className="mb-6 leading-5">{deleteConfirm.impactMessage}</Text>
                         <View className="flex-row gap-3">
                             <Pressable onPress={() => setDeleteConfirm({ visible: false, transaction: null, impactMessage: '' })} style={{ backgroundColor: isDark ? '#374151' : '#f1f5f9' }} className="flex-1 py-3.5 rounded-xl items-center active:opacity-80">
                                 <Text style={{ color: isDark ? '#d1d5db' : '#374151' }} className="font-bold">{t('common.cancel')}</Text>

@@ -7,9 +7,27 @@ import { StatusBar } from "expo-status-bar";
 import { ThemeProvider, useTheme } from "../context/theme-context";
 import { LanguageProvider } from "../context/language-context";
 import { View } from "react-native";
+import { ToastProvider, useToast } from "../components/ui/toast";
+import { registerPushToken, setupForegroundHandler, setupTokenRefreshListener } from "../lib/notifications";
+import { useEffect } from "react";
 
 function AppContent() {
   const { isDark } = useTheme();
+  const { show } = useToast();
+
+  useEffect(() => {
+    // Register token on mount (if logged in)
+    registerPushToken();
+
+    // Setup handlers
+    const unsubscribeForeground = setupForegroundHandler((msg, type) => show(msg, type));
+    const unsubscribeRefresh = setupTokenRefreshListener();
+
+    return () => {
+      unsubscribeForeground();
+      unsubscribeRefresh();
+    };
+  }, []);
 
   return (
     <View style={{ flex: 1, backgroundColor: isDark ? '#111827' : '#ffffff' }} className={isDark ? 'dark' : ''}>
@@ -28,7 +46,9 @@ export default function RootLayout() {
       <SafeAreaProvider>
         <ThemeProvider>
           <LanguageProvider>
-            <AppContent />
+            <ToastProvider>
+              <AppContent />
+            </ToastProvider>
           </LanguageProvider>
         </ThemeProvider>
       </SafeAreaProvider>

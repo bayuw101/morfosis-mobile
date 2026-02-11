@@ -1,4 +1,4 @@
-import { View, Text, ScrollView, Pressable, TextInput, ActivityIndicator, RefreshControl, Switch, Alert, Modal, KeyboardAvoidingView, Platform, Image, Animated } from "react-native";
+import { View, Text, ScrollView, Pressable, TextInput, ActivityIndicator, RefreshControl, Switch, Modal, KeyboardAvoidingView, Platform, Image, Animated } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { Plus, Target, Calendar, Trash2, Check, Save, X, Search, ChevronsUpDown, Sparkles, Copy, Users, Pencil, GripVertical, ChevronDown, Edit2 } from "lucide-react-native";
@@ -17,6 +17,10 @@ import { Button } from "../../components/ui/button";
 import { ConfirmationModal } from "../../components/ui/confirmation-modal";
 import { ScreenLoader } from "../../components/ui/loaders";
 import { StatusBar } from "expo-status-bar";
+import { useDashboardStyles } from "../../hooks/use-dashboard-styles";
+import { DashboardHeader } from "../../components/dashboard/dashboard-header";
+import { DashboardSheet } from "../../components/dashboard/dashboard-sheet";
+import { useToast } from "../../components/ui/toast";
 
 // Safe import for Google Signin
 let GoogleSignin: any = {
@@ -84,34 +88,12 @@ export default function PlanningScreen() {
     const insets = useSafeAreaInsets();
     const slideAnim = useRef(new Animated.Value(0)).current;
     const { activeFamily, isSwitching } = useFamily();
-    const { isDark } = useTheme();
+    // Use Dashboard Styles Hook
+    const { isDark, colors } = useDashboardStyles();
     const { t } = useLanguage();
+    const toast = useToast();
 
-    // --- Theme colors (consistent with dashboard/transactions) ---
-    const headerBg = isDark ? '#111827' : '#1e40af';
-    const headerCardBg = isDark ? 'rgba(31,41,55,0.8)' : 'rgba(255,255,255,0.15)';
-    const headerCardBorder = isDark ? 'rgba(55,65,81,0.6)' : 'rgba(255,255,255,0.2)';
-    const headerSubText = isDark ? '#9ca3af' : 'rgba(255,255,255,0.7)';
-    const familyPillBg = isDark ? 'rgba(31,41,55,0.8)' : 'rgba(255,255,255,0.2)';
-    const familyPillBorder = isDark ? '#374151' : 'rgba(255,255,255,0.3)';
-    const familyPillText = isDark ? '#d1d5db' : 'rgba(255,255,255,0.9)';
-
-    const contentBg = isDark ? '#1f2937' : '#f8fafc';
-    const cardBg = isDark ? '#374151' : '#ffffff';
-    const cardBorder = isDark ? '#4b5563' : '#e2e8f0';
-    const textPrimary = isDark ? '#f9fafb' : '#0f172a';
-    const textSecondary = isDark ? '#9ca3af' : '#64748b';
-    const textMuted = isDark ? '#6b7280' : '#94a3b8';
-    const dividerColor = isDark ? '#4b5563' : '#f1f5f9';
-    const inputBg = isDark ? '#374151' : '#f8fafc';
-    const inputBorder = isDark ? '#4b5563' : '#e2e8f0';
-
-    // Modal colors
-    const modalBg = isDark ? '#1f2937' : '#ffffff';
-    const modalHeaderBorder = isDark ? '#374151' : '#f1f5f9';
-    const modalInputBg = isDark ? '#374151' : '#f8fafc';
-    const modalInputBorder = isDark ? '#4b5563' : '#e2e8f0';
-    const closeBtnBg = isDark ? '#374151' : '#f1f5f9';
+    // Removed manual color constants as they are now in 'colors'
 
     const [user, setUser] = useState<any>(null);
     const [familyModalVisible, setFamilyModalVisible] = useState(false);
@@ -280,7 +262,30 @@ export default function PlanningScreen() {
 
     const handleSave = async () => {
         if (!formName.trim()) {
-            Alert.alert(t('common.error'), t('planning.errorPlanName'));
+            toast.show(t('planning.errorPlanName'), 'error');
+            return;
+        }
+
+        // Validate items
+        const validItems = formItems.filter(item => item.category_id && item.category_id.trim() !== "");
+
+        if (validItems.length === 0) {
+            toast.show("Please add at least one category allocation", 'error');
+            return;
+        }
+
+        // Check for duplicates
+        const categoryIds = validItems.map(i => i.category_id);
+        const uniqueIds = new Set(categoryIds);
+        if (uniqueIds.size !== categoryIds.length) {
+            toast.show("Duplicate categories are not allowed. Please combine them.", 'error');
+            return;
+        }
+
+        // Check for positive amounts
+        const hasZeroAmount = validItems.some(item => (Number(item.planned_amount) || 0) <= 0);
+        if (hasZeroAmount) {
+            toast.show("Planned amounts must be greater than 0", 'error');
             return;
         }
 
@@ -296,13 +301,18 @@ export default function PlanningScreen() {
                 start_date: formStartDate.toISOString().split('T')[0],
                 end_date: formEndDate.toISOString().split('T')[0],
                 notes: formNotes.trim() || null,
-                items: formItems.map(item => ({
-                    category_id: item.category_id,
-                    planned_amount: item.planned_amount,
-                    notes: item.notes || null
-                }))
+                items: formItems
+                    .filter(item => item.category_id && item.category_id.trim() !== "") // Filter out items without category
+                    .map(item => ({
+                        category_id: item.category_id,
+                        planned_amount: Number(item.planned_amount) || 0,
+                        notes: item.notes || null
+                    }))
             };
 
+            console.log("Saving Budget Payload:", JSON.stringify(payload, null, 2));
+
+            const isUpdate = !!selectedBudgetId;
             let res;
             if (selectedBudgetId) {
                 res = await fetch(`${API_URL}/mobile/budgets/${selectedBudgetId}`, {
@@ -322,13 +332,15 @@ export default function PlanningScreen() {
                 setShowForm(false);
                 resetForm();
                 await fetchData();
+                toast.show(isUpdate ? t('common.updated') : t('common.created'), 'success');
             } else {
                 const err = await res.json();
-                Alert.alert(t('common.error'), err.error || t('planning.errorSave'));
+                console.error("Save failed:", err);
+                toast.show(err.details || err.error || t('planning.errorSave'), 'error');
             }
-        } catch (e) {
+        } catch (e: any) {
             console.error("Save error:", e);
-            Alert.alert(t('common.error'), t('planning.errorNetwork'));
+            toast.show(e.message || t('planning.errorNetwork'), 'error');
         } finally {
             setIsSaving(false);
         }
@@ -378,11 +390,12 @@ export default function PlanningScreen() {
                 resetForm();
                 await fetchData();
                 setShowDeleteModal(false);
+                toast.show(t('common.deleted'), 'success');
             } else {
-                Alert.alert(t('common.error'), t('planning.errorDelete'));
+                toast.show(t('planning.errorDelete'), 'error');
             }
         } catch (e) {
-            Alert.alert(t('common.error'), t('planning.errorDelete'));
+            toast.show(t('planning.errorDelete'), 'error');
         } finally {
             setIsSaving(false);
         }
@@ -485,57 +498,32 @@ export default function PlanningScreen() {
     }
 
     return (
-        <View style={{ flex: 1, backgroundColor: headerBg }}>
+        <View style={{ flex: 1, backgroundColor: colors.headerBg }}>
             <StatusBar style="light" />
             {/* Header Section */}
             <View style={{ paddingTop: insets.top }} className="px-6 pb-5">
-                {/* Top Row: User & Family */}
-                <View className="flex-row items-center justify-between mb-5">
-                    <Pressable onPress={() => setEditProfileModalVisible(true)} className="flex-row items-center gap-3 active:opacity-80">
-                        <View style={{ borderColor: isDark ? '#4b5563' : 'rgba(255,255,255,0.4)' }} className="h-12 w-12 bg-white/20 rounded-full items-center justify-center overflow-hidden border-2">
-                            {user?.picture ? (
-                                <Image source={{ uri: user.picture }} style={{ width: '100%', height: '100%' }} />
-                            ) : (
-                                <Text className="font-bold text-white text-lg">{user?.name?.charAt(0) || "U"}</Text>
-                            )}
-                        </View>
-                        <View>
-                            <Text style={{ color: headerSubText }} className="text-[10px] font-medium uppercase tracking-wider">{getGreeting()}</Text>
-                            <View className="flex-row items-center gap-1.5">
-                                <Text className="text-lg font-bold text-white">{user?.name?.split(' ')[0] || "User"}</Text>
-                                <Edit2 size={11} color={headerSubText} />
-                            </View>
-                        </View>
-                    </Pressable>
-
-                    <Pressable
-                        style={{ backgroundColor: familyPillBg, borderColor: familyPillBorder }}
-                        className="flex-row items-center border rounded-full px-3 py-2 gap-2 active:opacity-80"
-                        onPress={() => setFamilyModalVisible(true)}
-                    >
-                        <View className="h-5 w-5 rounded-full bg-blue-400/30 items-center justify-center">
-                            <Users size={10} color="#93c5fd" />
-                        </View>
-                        <Text style={{ color: familyPillText }} className="text-xs font-semibold">{activeFamily?.name || "My Family"}</Text>
-                        <ChevronDown size={12} color={familyPillText} />
-                    </Pressable>
-                </View>
+                <DashboardHeader
+                    user={user}
+                    activeFamily={activeFamily}
+                    onProfilePress={() => setEditProfileModalVisible(true)}
+                    onFamilyPress={() => setFamilyModalVisible(true)}
+                />
 
                 {/* Summary in Header */}
-                <View style={{ backgroundColor: headerCardBg, borderColor: headerCardBorder }} className="rounded-2xl p-4 border">
+                <View style={{ backgroundColor: colors.headerCardBg, borderColor: colors.headerCardBorder }} className="rounded-2xl p-4 border">
                     <View className="flex-row items-center gap-2 mb-1">
                         <Target size={14} color="#93c5fd" />
-                        <Text style={{ color: headerSubText }} className="text-xs">{t('planning.totalPlannedBudget')}</Text>
+                        <Text style={{ color: colors.headerSubText }} className="text-xs">{t('planning.totalPlannedBudget')}</Text>
                     </View>
                     <Text className="text-2xl font-bold text-white mb-3">{formatCurrency(totalBudgetAmount)}</Text>
 
                     <View className="flex-row gap-3">
                         <View className="flex-1 bg-white/10 px-3 py-2 rounded-lg">
-                            <Text style={{ color: headerSubText }} className="text-[10px] mb-0.5">{t('planning.activePlans')}</Text>
+                            <Text style={{ color: colors.headerSubText }} className="text-[10px] mb-0.5">{t('planning.activePlans')}</Text>
                             <Text className="text-white font-bold">{budgets.length}</Text>
                         </View>
                         <View className="flex-1 bg-white/10 px-3 py-2 rounded-lg">
-                            <Text style={{ color: headerSubText }} className="text-[10px] mb-0.5">{t('planning.totalSpent')}</Text>
+                            <Text style={{ color: colors.headerSubText }} className="text-[10px] mb-0.5">{t('planning.totalSpent')}</Text>
                             <Text className="text-white font-bold">{formatCurrency(totalSpent, true)}</Text>
                         </View>
                     </View>
@@ -543,13 +531,8 @@ export default function PlanningScreen() {
             </View>
 
             {/* Content Card - Slides Up */}
-            <Animated.View
-                style={{
-                    flex: 1,
-                    backgroundColor: contentBg,
-                    borderTopLeftRadius: 28,
-                    borderTopRightRadius: 28,
-                    overflow: 'hidden',
+            <DashboardSheet
+                animatedStyle={{
                     transform: [{
                         translateY: slideAnim.interpolate({
                             inputRange: [0, 1],
@@ -558,10 +541,6 @@ export default function PlanningScreen() {
                     }]
                 }}
             >
-                {/* iOS-style Handle */}
-                <View className="items-center pt-3 pb-2">
-                    <View style={{ backgroundColor: isDark ? '#4b5563' : '#cbd5e1' }} className="w-10 h-1 rounded-full" />
-                </View>
 
                 <ScrollView
                     className="flex-1"
@@ -571,13 +550,13 @@ export default function PlanningScreen() {
                 >
                     {/* Header Row: Add Button */}
                     <View className="flex-row items-center justify-between mb-4">
-                        <Text style={{ color: textPrimary }} className="font-bold text-lg">{t('planning.myPlans')}</Text>
+                        <Text style={{ color: colors.textPrimary }} className="font-bold text-lg">{t('planning.myPlans')}</Text>
                         <Button
                             label={t('planning.newPlan')}
                             onPress={handleNewBudget}
                             leftIcon={<Plus size={16} color="white" strokeWidth={2.5} />}
                             size="sm"
-                            className="bg-blue-600 rounded-xl px-4"
+                            className="bg-blue-600 rounded-xl px-4 border-0"
                         />
                     </View>
 
@@ -585,10 +564,10 @@ export default function PlanningScreen() {
                     {budgets.length === 0 ? (
                         <View style={{ backgroundColor: isDark ? '#374151' : '#f8fafc', borderColor: isDark ? '#4b5563' : '#e2e8f0' }} className="items-center py-16 rounded-3xl border border-dashed">
                             <View style={{ backgroundColor: isDark ? '#1f2937' : '#f1f5f9' }} className="h-20 w-20 rounded-full items-center justify-center mb-4">
-                                <Sparkles size={32} color={textMuted} />
+                                <Sparkles size={32} color={colors.textMuted} />
                             </View>
-                            <Text style={{ color: textPrimary }} className="font-bold text-lg mb-1">{t('planning.noPlansYet')}</Text>
-                            <Text style={{ color: textSecondary }} className="text-sm text-center mb-6 px-8">
+                            <Text style={{ color: colors.textPrimary }} className="font-bold text-lg mb-1">{t('planning.noPlansYet')}</Text>
+                            <Text style={{ color: colors.textSecondary }} className="text-sm text-center mb-6 px-8">
                                 {t('planning.createFirst')}
                             </Text>
                             <Button
@@ -607,8 +586,8 @@ export default function PlanningScreen() {
                                     key={budget.id}
                                     onPress={() => handleEditBudget(budget)}
                                     style={{
-                                        backgroundColor: cardBg,
-                                        borderColor: budget.is_default ? (isDark ? '#3b82f6' : '#bfdbfe') : cardBorder,
+                                        backgroundColor: colors.cardBg,
+                                        borderColor: budget.is_default ? (isDark ? '#3b82f6' : '#bfdbfe') : colors.cardBorder,
                                     }}
                                     className="rounded-3xl border mb-3 overflow-hidden"
                                 >
@@ -621,14 +600,14 @@ export default function PlanningScreen() {
                                         <View className="flex-row items-start justify-between mb-3">
                                             <View className="flex-1">
                                                 <View className="flex-row items-center gap-2 mb-0.5">
-                                                    <Text style={{ color: textPrimary }} className="font-bold text-[15px]">{budget.name}</Text>
+                                                    <Text style={{ color: colors.textPrimary }} className="font-bold text-[15px]">{budget.name}</Text>
                                                     {budget.is_default && (
                                                         <View style={{ backgroundColor: isDark ? 'rgba(59,130,246,0.2)' : '#dbeafe' }} className="px-2 py-0.5 rounded-full">
                                                             <Text style={{ color: isDark ? '#93c5fd' : '#1d4ed8' }} className="text-[9px] font-bold uppercase">{t('planning.default')}</Text>
                                                         </View>
                                                     )}
                                                 </View>
-                                                <Text style={{ color: textMuted }} className="text-xs">
+                                                <Text style={{ color: colors.textMuted }} className="text-xs">
                                                     {formatDateShort(budget.start_date)} – {formatDate(budget.end_date)}
                                                 </Text>
                                             </View>
@@ -639,7 +618,7 @@ export default function PlanningScreen() {
                                                     style={{ backgroundColor: isDark ? '#1f2937' : '#f1f5f9' }}
                                                     className="p-2 rounded-lg active:opacity-70"
                                                 >
-                                                    <Copy size={14} color={textSecondary} />
+                                                    <Copy size={14} color={colors.textSecondary} />
                                                 </Pressable>
                                                 {settingDefaultId === budget.id ? (
                                                     <View className="w-10 h-6 items-center justify-center">
@@ -661,10 +640,10 @@ export default function PlanningScreen() {
                                         {/* Progress Section */}
                                         <View style={{ backgroundColor: isDark ? '#1f2937' : '#f8fafc' }} className="rounded-xl px-3 py-2.5">
                                             <View className="flex-row justify-between mb-2">
-                                                <Text style={{ color: textSecondary }} className="text-xs">
+                                                <Text style={{ color: colors.textSecondary }} className="text-xs">
                                                     {formatCurrency(Number(budget.spent) || 0, true)} {t('planning.spent')}
                                                 </Text>
-                                                <Text style={{ color: textPrimary }} className="text-xs font-semibold">
+                                                <Text style={{ color: colors.textPrimary }} className="text-xs font-semibold">
                                                     {formatCurrency(Number(budget.amount) || 0, true)}
                                                 </Text>
                                             </View>
@@ -684,7 +663,7 @@ export default function PlanningScreen() {
                         })
                     )}
                 </ScrollView>
-            </Animated.View>
+            </DashboardSheet>
 
             {/* Form Modal */}
             <Modal visible={showForm} animationType="slide" transparent>
@@ -693,19 +672,19 @@ export default function PlanningScreen() {
                         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
                         className="flex-1 justify-end"
                     >
-                        <View style={{ backgroundColor: modalBg, paddingBottom: insets.bottom }} className="rounded-t-[32px] h-[85%]">
+                        <View style={{ backgroundColor: colors.modalBg, paddingBottom: insets.bottom }} className="rounded-t-[32px] h-[85%]">
                             {/* Form Header */}
-                            <View style={{ borderBottomColor: modalHeaderBorder }} className="flex-row items-center justify-between p-5 border-b">
+                            <View style={{ borderBottomColor: colors.modalHeaderBorder }} className="flex-row items-center justify-between p-5 border-b">
                                 <View className="flex-row items-center gap-3">
-                                    <Pressable onPress={handleCloseForm} style={{ backgroundColor: closeBtnBg }} className="p-2 rounded-full">
-                                        <X size={18} color={textSecondary} />
+                                    <Pressable onPress={handleCloseForm} style={{ backgroundColor: colors.closeBtnBg }} className="p-2 rounded-full">
+                                        <X size={18} color={colors.textSecondary} />
                                     </Pressable>
                                     <View>
-                                        <Text style={{ color: textPrimary }} className="text-xl font-bold">
+                                        <Text style={{ color: colors.textPrimary }} className="text-xl font-bold">
                                             {selectedBudgetId ? t('planning.editPlan') : t('planning.newPlan')}
                                         </Text>
                                         {totalPlanned > 0 && (
-                                            <Text style={{ color: textSecondary }} className="text-xs">
+                                            <Text style={{ color: colors.textSecondary }} className="text-xs">
                                                 {t('planning.total')}: {formatCurrency(totalPlanned)}
                                             </Text>
                                         )}
@@ -736,7 +715,7 @@ export default function PlanningScreen() {
                             {isLoadingForm ? (
                                 <View className="h-64 items-center justify-center">
                                     <ActivityIndicator size="large" color="#3b82f6" />
-                                    <Text style={{ color: textSecondary }} className="mt-3 text-sm">{t('planning.loadingPlanDetails')}</Text>
+                                    <Text style={{ color: colors.textSecondary }} className="mt-3 text-sm">{t('planning.loadingPlanDetails')}</Text>
                                 </View>
                             ) : (
                                 <DraggableFlatList
@@ -751,12 +730,12 @@ export default function PlanningScreen() {
                                         <>
                                             {/* Plan Name */}
                                             <View className="mb-6">
-                                                <Text style={{ color: textMuted }} className="text-[11px] font-bold uppercase tracking-widest mb-2 ml-1">{t('planning.planName')}</Text>
+                                                <Text style={{ color: colors.textMuted }} className="text-[11px] font-bold uppercase tracking-widest mb-2 ml-1">{t('planning.planName')}</Text>
                                                 <TextInput
-                                                    style={{ backgroundColor: modalInputBg, borderColor: modalInputBorder, color: textPrimary }}
+                                                    style={{ backgroundColor: colors.modalInputBg, borderColor: colors.modalInputBorder, color: colors.textPrimary }}
                                                     className="border rounded-2xl px-4 py-4 text-lg font-semibold"
                                                     placeholder={t('planning.planNamePlaceholder')}
-                                                    placeholderTextColor={textMuted}
+                                                    placeholderTextColor={colors.textMuted}
                                                     value={formName}
                                                     onChangeText={setFormName}
                                                 />
@@ -764,34 +743,34 @@ export default function PlanningScreen() {
 
                                             {/* Duration */}
                                             <View className="mb-8">
-                                                <Text style={{ color: textMuted }} className="text-[11px] font-bold uppercase tracking-widest mb-2 ml-1">{t('planning.frequencyDuration')}</Text>
+                                                <Text style={{ color: colors.textMuted }} className="text-[11px] font-bold uppercase tracking-widest mb-2 ml-1">{t('planning.frequencyDuration')}</Text>
                                                 <View className="flex-row gap-3">
                                                     <Pressable
                                                         onPress={() => setShowStartDatePicker(true)}
-                                                        style={{ backgroundColor: modalInputBg, borderColor: modalInputBorder }}
+                                                        style={{ backgroundColor: colors.modalInputBg, borderColor: colors.modalInputBorder }}
                                                         className="flex-1 border rounded-2xl p-4 flex-row items-center gap-3 active:opacity-80"
                                                     >
                                                         <View style={{ backgroundColor: isDark ? 'rgba(59,130,246,0.15)' : '#dbeafe' }} className="h-10 w-10 rounded-full items-center justify-center">
                                                             <Calendar size={18} color="#2563eb" />
                                                         </View>
                                                         <View>
-                                                            <Text style={{ color: textMuted }} className="text-[10px] font-bold uppercase mb-0.5">{t('planning.startDate')}</Text>
-                                                            <Text style={{ color: textPrimary }} className="font-bold text-sm">
+                                                            <Text style={{ color: colors.textMuted }} className="text-[10px] font-bold uppercase mb-0.5">{t('planning.startDate')}</Text>
+                                                            <Text style={{ color: colors.textPrimary }} className="font-bold text-sm">
                                                                 {formStartDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
                                                             </Text>
                                                         </View>
                                                     </Pressable>
                                                     <Pressable
                                                         onPress={() => setShowEndDatePicker(true)}
-                                                        style={{ backgroundColor: modalInputBg, borderColor: modalInputBorder }}
+                                                        style={{ backgroundColor: colors.modalInputBg, borderColor: colors.modalInputBorder }}
                                                         className="flex-1 border rounded-2xl p-4 flex-row items-center gap-3 active:opacity-80"
                                                     >
                                                         <View style={{ backgroundColor: isDark ? 'rgba(147,51,234,0.15)' : '#f3e8ff' }} className="h-10 w-10 rounded-full items-center justify-center">
                                                             <Calendar size={18} color="#9333ea" />
                                                         </View>
                                                         <View>
-                                                            <Text style={{ color: textMuted }} className="text-[10px] font-bold uppercase mb-0.5">{t('planning.endDate')}</Text>
-                                                            <Text style={{ color: textPrimary }} className="font-bold text-sm">
+                                                            <Text style={{ color: colors.textMuted }} className="text-[10px] font-bold uppercase mb-0.5">{t('planning.endDate')}</Text>
+                                                            <Text style={{ color: colors.textPrimary }} className="font-bold text-sm">
                                                                 {formEndDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
                                                             </Text>
                                                         </View>
@@ -801,7 +780,7 @@ export default function PlanningScreen() {
 
                                             {/* Budgets Header */}
                                             <View className="mb-3 mt-2">
-                                                <Text style={{ color: textPrimary }} className="text-sm font-bold">{t('planning.categoryAllocations')}</Text>
+                                                <Text style={{ color: colors.textPrimary }} className="text-sm font-bold">{t('planning.categoryAllocations')}</Text>
                                             </View>
                                         </>
                                     }
@@ -810,38 +789,38 @@ export default function PlanningScreen() {
                                         return (
                                             <ScaleDecorator>
                                                 <View style={{
-                                                    backgroundColor: cardBg,
-                                                    borderColor: isActive ? '#3b82f6' : cardBorder,
+                                                    backgroundColor: colors.cardBg,
+                                                    borderColor: isActive ? '#3b82f6' : colors.cardBorder,
                                                 }} className={cn(
                                                     "border rounded-2xl p-4 mb-3 relative flex-row items-start gap-3",
                                                     isActive && "shadow-xl z-10"
                                                 )}>
                                                     {/* Drag Handle */}
                                                     <Pressable onPressIn={drag} className="py-2 pr-2 -ml-2">
-                                                        <GripVertical size={20} color={textMuted} />
+                                                        <GripVertical size={20} color={colors.textMuted} />
                                                     </Pressable>
 
                                                     <View className="flex-1 gap-3">
                                                         {/* Category Selector */}
                                                         <Pressable
                                                             onPress={() => openCategorySelector(index!)}
-                                                            style={{ backgroundColor: modalInputBg, borderColor: modalInputBorder }}
+                                                            style={{ backgroundColor: colors.modalInputBg, borderColor: colors.modalInputBorder }}
                                                             className="flex-row items-center justify-between border rounded-xl px-3 h-12"
                                                         >
-                                                            <Text style={{ color: item.category_name ? textPrimary : textMuted }} className="text-sm font-medium">
+                                                            <Text style={{ color: item.category_name ? colors.textPrimary : colors.textMuted }} className="text-sm font-medium">
                                                                 {item.category_name || t('planning.selectCategory')}
                                                             </Text>
-                                                            <ChevronsUpDown size={14} color={textMuted} />
+                                                            <ChevronsUpDown size={14} color={colors.textMuted} />
                                                         </Pressable>
 
                                                         {/* Amount */}
-                                                        <View style={{ backgroundColor: modalInputBg, borderColor: modalInputBorder }} className="flex-row items-center border rounded-xl px-3 h-12">
-                                                            <Text style={{ color: textSecondary }} className="font-bold mr-2">Rp</Text>
+                                                        <View style={{ backgroundColor: colors.modalInputBg, borderColor: colors.modalInputBorder }} className="flex-row items-center border rounded-xl px-3 h-12">
+                                                            <Text style={{ color: colors.textSecondary }} className="font-bold mr-2">Rp</Text>
                                                             <TextInput
-                                                                style={{ color: textPrimary }}
+                                                                style={{ color: colors.textPrimary }}
                                                                 className="flex-1 font-bold text-base"
                                                                 placeholder={t('planning.allocations')}
-                                                                placeholderTextColor={textMuted}
+                                                                placeholderTextColor={colors.textMuted}
                                                                 keyboardType="numeric"
                                                                 value={item.planned_amount ? new Intl.NumberFormat("id-ID").format(item.planned_amount) : ""}
                                                                 onChangeText={(text) => {
@@ -871,27 +850,27 @@ export default function PlanningScreen() {
                                                 style={{ borderColor: isDark ? '#4b5563' : '#e2e8f0' }}
                                                 className="border-2 border-dashed rounded-2xl py-5 items-center justify-center flex-row gap-2 active:opacity-70 mb-6"
                                             >
-                                                <Plus size={18} color={textMuted} />
-                                                <Text style={{ color: textMuted }} className="font-bold uppercase tracking-wider text-xs">{t('planning.addAllocations')}</Text>
+                                                <Plus size={18} color={colors.textMuted} />
+                                                <Text style={{ color: colors.textMuted }} className="font-bold uppercase tracking-wider text-xs">{t('planning.addAllocations')}</Text>
                                             </Pressable>
 
                                             {/* Summary Card */}
-                                            <View style={{ backgroundColor: modalInputBg, borderColor: modalInputBorder }} className="border rounded-2xl p-4 mb-6 flex-row items-center justify-between">
+                                            <View style={{ backgroundColor: colors.modalInputBg, borderColor: colors.modalInputBorder }} className="border rounded-2xl p-4 mb-6 flex-row items-center justify-between">
                                                 <View className="flex-row items-center gap-2">
                                                     <View style={{ backgroundColor: isDark ? 'rgba(59,130,246,0.15)' : '#dbeafe' }} className="p-2 rounded-full">
                                                         <Target size={16} color="#2563eb" />
                                                     </View>
-                                                    <Text style={{ color: textSecondary }} className="font-bold text-xs uppercase tracking-wider">{t('planning.totalAllocated')}</Text>
+                                                    <Text style={{ color: colors.textSecondary }} className="font-bold text-xs uppercase tracking-wider">{t('planning.totalAllocated')}</Text>
                                                 </View>
-                                                <Text style={{ color: textPrimary }} className="font-bold text-lg">{formatCurrency(totalPlanned)}</Text>
+                                                <Text style={{ color: colors.textPrimary }} className="font-bold text-lg">{formatCurrency(totalPlanned)}</Text>
                                             </View>
 
-                                            <Text style={{ color: textMuted }} className="text-[11px] font-bold uppercase tracking-widest mb-2 ml-1">{t('planning.overallNotes')}</Text>
+                                            <Text style={{ color: colors.textMuted }} className="text-[11px] font-bold uppercase tracking-widest mb-2 ml-1">{t('planning.overallNotes')}</Text>
                                             <TextInput
-                                                style={{ backgroundColor: modalInputBg, borderColor: modalInputBorder, color: textPrimary }}
+                                                style={{ backgroundColor: colors.modalInputBg, borderColor: colors.modalInputBorder, color: colors.textPrimary }}
                                                 className="border rounded-2xl px-4 py-3.5 text-sm h-24"
                                                 placeholder={t('planning.notesPlaceholder')}
-                                                placeholderTextColor={textMuted}
+                                                placeholderTextColor={colors.textMuted}
                                                 value={formNotes}
                                                 onChangeText={setFormNotes}
                                                 multiline
@@ -909,22 +888,22 @@ export default function PlanningScreen() {
             {/* Category Selector Modal */}
             <Modal visible={showCategorySelector} animationType="slide" transparent>
                 <View className="flex-1 bg-black/50 justify-end">
-                    <View style={{ backgroundColor: modalBg, paddingBottom: insets.bottom }} className="rounded-t-[32px] h-[70%]">
-                        <View style={{ borderBottomColor: modalHeaderBorder }} className="p-5 border-b flex-row items-center justify-between">
-                            <Text style={{ color: textPrimary }} className="text-lg font-bold">{t('planning.selectCategory')}</Text>
-                            <Pressable onPress={() => setShowCategorySelector(false)} style={{ backgroundColor: closeBtnBg }} className="p-2 rounded-full">
-                                <X size={16} color={textSecondary} />
+                    <View style={{ backgroundColor: colors.modalBg, paddingBottom: insets.bottom }} className="rounded-t-[32px] h-[70%]">
+                        <View style={{ borderBottomColor: colors.modalHeaderBorder }} className="p-5 border-b flex-row items-center justify-between">
+                            <Text style={{ color: colors.textPrimary }} className="text-lg font-bold">{t('planning.selectCategory')}</Text>
+                            <Pressable onPress={() => setShowCategorySelector(false)} style={{ backgroundColor: colors.closeBtnBg }} className="p-2 rounded-full">
+                                <X size={16} color={colors.textSecondary} />
                             </Pressable>
                         </View>
 
                         <View className="px-5 py-3">
-                            <View style={{ backgroundColor: modalInputBg, borderColor: modalInputBorder }} className="flex-row items-center border rounded-xl px-3 h-11">
-                                <Search size={16} color={textMuted} />
+                            <View style={{ backgroundColor: colors.modalInputBg, borderColor: colors.modalInputBorder }} className="flex-row items-center border rounded-xl px-3 h-11">
+                                <Search size={16} color={colors.textMuted} />
                                 <TextInput
-                                    style={{ color: textPrimary }}
+                                    style={{ color: colors.textPrimary }}
                                     className="flex-1 ml-3"
                                     placeholder={t('planning.searchCategories')}
-                                    placeholderTextColor={textMuted}
+                                    placeholderTextColor={colors.textMuted}
                                     value={categorySearch}
                                     onChangeText={setCategorySearch}
                                     autoFocus
@@ -953,13 +932,13 @@ export default function PlanningScreen() {
                                 <Pressable
                                     key={cat.id}
                                     onPress={() => selectCategory(cat)}
-                                    style={{ borderBottomColor: dividerColor }}
+                                    style={{ borderBottomColor: colors.divider }}
                                     className="flex-row items-center gap-3 p-4 border-b active:opacity-70"
                                 >
                                     <View style={{ backgroundColor: isDark ? '#374151' : '#f1f5f9' }} className="h-10 w-10 rounded-full items-center justify-center">
                                         <Text className="text-lg">{cat.icon || "🏷️"}</Text>
                                     </View>
-                                    <Text style={{ color: textPrimary }} className="font-semibold text-sm">{cat.name}</Text>
+                                    <Text style={{ color: colors.textPrimary }} className="font-semibold text-sm">{cat.name}</Text>
                                 </Pressable>
                             ))}
                             <View className="h-10" />

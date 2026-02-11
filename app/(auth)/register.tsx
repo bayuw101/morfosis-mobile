@@ -10,6 +10,7 @@ import { Button } from "../../components/ui/button";
 import { API_URL } from "../../constants/config";
 import { getAuth, createUserWithEmailAndPassword, getIdToken } from "@react-native-firebase/auth";
 import { getAuthHeader } from "../../lib/auth";
+import { registerPushToken } from "../../lib/notifications";
 
 export default function RegisterScreen() {
   const router = useRouter();
@@ -35,10 +36,29 @@ export default function RegisterScreen() {
     ]).start();
   }, []);
 
-  // MOCK invite details
-  const [inviteDetails, setInviteDetails] = useState<{ family_name: string, inviter_name?: string } | null>(
-    inviteToken ? { family_name: "Smith Family", inviter_name: "John Smith" } : null
-  );
+  // Fetch real invite details from public preview endpoint
+  const [inviteDetails, setInviteDetails] = useState<{ family_name: string, inviter_name?: string } | null>(null);
+
+  useEffect(() => {
+    if (!inviteToken) return;
+    const fetchInviteDetails = async () => {
+      try {
+        const res = await fetch(`${API_URL}/mobile/invitations/preview?token=${inviteToken}`);
+        if (res.ok) {
+          const data = await res.json();
+          setInviteDetails(data);
+        } else {
+          // Fallback if endpoint fails
+          setInviteDetails({ family_name: "Family", inviter_name: "Someone" });
+        }
+      } catch (e) {
+        console.error("Failed to fetch invite details:", e);
+        // Fallback on error
+        setInviteDetails({ family_name: "Family", inviter_name: "Someone" });
+      }
+    };
+    fetchInviteDetails();
+  }, [inviteToken]);
 
   const handleRegister = async () => {
     if (!name || !email || !password) {
@@ -103,6 +123,9 @@ export default function RegisterScreen() {
       // Optional: Auto-login after register
       // Since we already have the token and backend verified it, we can just redirect to dashboard
       // providing we set up the session correctly.
+
+      // Register token for new user
+      registerPushToken();
 
       setTimeout(() => {
         router.replace("/(dashboard)");
