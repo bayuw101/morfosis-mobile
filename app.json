@@ -16,7 +16,7 @@
       "package": "com.morfosis.mobile",
       "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
-        "backgroundColor": "#000000",
+        "backgroundColor": "#FFFFFF",
         "foregroundImage": "./assets/images/morfosis-adaptive-foreground.png"
       },
       "edgeToEdgeEnabled": true,
